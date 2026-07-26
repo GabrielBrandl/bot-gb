@@ -1,0 +1,17 @@
+node_modules
+dist
+build
+.turbo
+.env
+.env.local
+*.log
+coverage
+.DS_Store
+*.tsbuildinfo
+apps/web/dist
+apps/api/dist
+apps/worker/dist
+packages/database/generated
+uploads
+.idea
+.vscode

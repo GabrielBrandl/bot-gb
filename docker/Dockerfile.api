@@ -1,0 +1,23 @@
+FROM node:22-alpine AS base
+RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
+WORKDIR /app
+
+FROM base AS deps
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* turbo.json tsconfig.base.json ./
+COPY packages ./packages
+COPY apps/api ./apps/api
+RUN pnpm install --frozen-lockfile=false
+
+FROM deps AS build
+RUN pnpm --filter @bot-wpp/shared-types build \
+ && pnpm --filter @bot-wpp/database generate \
+ && pnpm --filter @bot-wpp/database build \
+ && pnpm --filter @bot-wpp/api build
+
+FROM node:22-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=build /app /app
+WORKDIR /app/apps/api
+EXPOSE 3000
+CMD ["node", "dist/main.js"]

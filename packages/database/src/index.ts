@@ -1,0 +1,22 @@
+export { PrismaClient, Prisma, UserRole } from "@prisma/client";
+export type {
+  Tenant,
+  User,
+  WhatsappInstance,
+  Contact,
+  Tag,
+  Conversation,
+  Message,
+  KanbanBoard,
+  KanbanStage,
+  KanbanCard,
+  Flow,
+  Campaign,
+  CampaignRecipient,
+  Payment,
+  AIAgent,
+  QuickReply,
+  AuditLog,
+  KnowledgeDocument,
+  KnowledgeChunk,
+} from "@prisma/client";

@@ -1,0 +1,90 @@
+@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap");
+@import "tailwindcss";
+
+:root {
+  --abs-blue: #0033b5;
+  --abs-blue-dark: #00288f;
+  --abs-blue-bright: #0052ff;
+  --abs-yellow: #f7c400;
+  --abs-yellow-light: #ffd633;
+  --abs-white: #ffffff;
+  --abs-gray: #e8e8e8;
+  --abs-bg: #f5f7fc;
+  --abs-text: #0f172a;
+  --abs-muted: #64748b;
+  --abs-danger: #dc2626;
+  --abs-gradient: linear-gradient(135deg, #00288f 0%, #0033b5 50%, #0052ff 100%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  color: var(--abs-text);
+  background: var(--abs-bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+/* ABS utility classes used across pages */
+.abs-gradient {
+  background: var(--abs-gradient);
+}
+
+.abs-card {
+  border: 1px solid var(--abs-gray);
+  background: var(--abs-white);
+  border-radius: 1rem;
+  box-shadow: 0 1px 2px rgb(0 40 143 / 0.04);
+}
+
+.abs-btn-primary {
+  background: var(--abs-yellow);
+  color: var(--abs-blue-dark);
+  font-weight: 600;
+  border-radius: 0.75rem;
+  transition: background 0.15s ease;
+}
+
+.abs-btn-primary:hover {
+  background: var(--abs-yellow-light);
+}
+
+.abs-btn-primary:disabled {
+  opacity: 0.6;
+}
+
+.abs-input {
+  width: 100%;
+  border: 1px solid var(--abs-gray);
+  background: var(--abs-white);
+  border-radius: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  color: var(--abs-text);
+  outline: none;
+}
+
+.abs-input:focus {
+  box-shadow: 0 0 0 3px rgb(0 51 181 / 0.15);
+  border-color: var(--abs-blue);
+}
+
+/* React Flow light canvas */
+.react-flow__background {
+  background: #f8fafc !important;
+}
