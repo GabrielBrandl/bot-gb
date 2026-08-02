@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { Component, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   ReactFlow,
+  ReactFlowProvider,
   Background,
   Controls,
   MiniMap,
@@ -39,14 +40,24 @@ const NODE_TYPES_LIST = [
   { type: "payment_link", label: "Link pagamento", color: "border-[var(--abs-yellow)]" },
 ] as const;
 
-function CustomNode({ data, type }: NodeProps) {
+type FlowNodeData = {
+  label?: string;
+  [key: string]: unknown;
+};
+
+function CustomNode({ data, type }: NodeProps<Node<FlowNodeData>>) {
   const meta = NODE_TYPES_LIST.find((n) => n.type === type);
+  const label = typeof data?.label === "string" ? data.label : "";
   return (
-    <div className={`min-w-[160px] rounded-lg border-2 bg-white px-3 py-2 ${meta?.color ?? "border-slate-600"}`}>
-      <Handle type="target" position={Position.Top} className="!bg-[var(--abs-yellow)]" />
-      <p className="text-xs font-medium text-[var(--abs-blue)]">{meta?.label ?? type}</p>
-      <p className="mt-1 text-sm text-[var(--abs-blue-dark)]">{(data.label as string) ?? ""}</p>
-      <Handle type="source" position={Position.Bottom} className="!bg-[var(--abs-yellow)]" />
+    <div
+      className={`min-w-[160px] rounded-lg border-2 bg-white px-3 py-2 shadow-sm ${
+        meta?.color ?? "border-slate-600"
+      }`}
+    >
+      <Handle type="target" position={Position.Top} style={{ background: "var(--abs-yellow)" }} />
+      <p className="text-xs font-medium text-[var(--abs-blue)]">{meta?.label ?? type ?? "Nó"}</p>
+      <p className="mt-1 text-sm text-[var(--abs-blue-dark)]">{label}</p>
+      <Handle type="source" position={Position.Bottom} style={{ background: "var(--abs-yellow)" }} />
     </div>
   );
 }
@@ -61,14 +72,79 @@ const nodeTypes = {
   payment_link: CustomNode,
 };
 
-export function FlowEditorPage() {
+function normalizeNodes(raw: unknown): Node<FlowNodeData>[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((item, index) => {
+    const n = (item ?? {}) as Partial<Node<FlowNodeData>> & { id?: string };
+    const type = typeof n.type === "string" && n.type ? n.type : "send_text";
+    return {
+      id: typeof n.id === "string" && n.id ? n.id : `node-${index}`,
+      type,
+      position: {
+        x: typeof n.position?.x === "number" ? n.position.x : 80 + index * 40,
+        y: typeof n.position?.y === "number" ? n.position.y : 80 + index * 40,
+      },
+      data: {
+        ...(typeof n.data === "object" && n.data ? n.data : {}),
+        label:
+          typeof (n.data as FlowNodeData | undefined)?.label === "string"
+            ? (n.data as FlowNodeData).label
+            : NODE_TYPES_LIST.find((t) => t.type === type)?.label ?? type,
+      },
+    };
+  });
+}
+
+function normalizeEdges(raw: unknown): Edge[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((item, index) => {
+      const e = (item ?? {}) as Partial<Edge>;
+      if (!e.source || !e.target) return null;
+      return {
+        id: typeof e.id === "string" && e.id ? e.id : `edge-${e.source}-${e.target}-${index}`,
+        source: String(e.source),
+        target: String(e.target),
+        sourceHandle: e.sourceHandle ?? undefined,
+        targetHandle: e.targetHandle ?? undefined,
+      } satisfies Edge;
+    })
+    .filter((e): e is Edge => e !== null);
+}
+
+class FlowEditorErrorBoundary extends Component<
+  { children: ReactNode },
+  { error: string | null }
+> {
+  state = { error: null as string | null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error: error.message || "Erro ao renderizar o editor" };
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="space-y-3">
+          <ErrorState message={`Editor de fluxo: ${this.state.error}`} />
+          <Link to="/automacoes" className={btnSecondary}>
+            Voltar para automações
+          </Link>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+function FlowEditorCanvas() {
   const { id } = useParams<{ id: string }>();
   const { token } = useAuth();
   const [flow, setFlow] = useState<Flow | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node<FlowNodeData>>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [selectedType, setSelectedType] = useState<string>("send_text");
   const [nodeLabel, setNodeLabel] = useState("");
@@ -79,18 +155,20 @@ export function FlowEditorPage() {
     try {
       const data = await flowsApi.get(token, id);
       setFlow(data);
-      setNodes(data.graph.nodes as Node[]);
-      setEdges(data.graph.edges as Edge[]);
+      const graph = data.graph ?? { nodes: [], edges: [] };
+      setNodes(normalizeNodes(graph.nodes));
+      setEdges(normalizeEdges(graph.edges));
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao carregar fluxo");
+      setFlow(null);
     } finally {
       setLoading(false);
     }
   }, [token, id, setNodes, setEdges]);
 
   useEffect(() => {
-    load();
+    void load();
   }, [load]);
 
   const onConnect = useCallback(
@@ -98,12 +176,15 @@ export function FlowEditorPage() {
     [setEdges],
   );
 
+  const defaultEdgeOptions = useMemo(() => ({ animated: false }), []);
+
   function addNode() {
-    const newNode: Node = {
+    const meta = NODE_TYPES_LIST.find((n) => n.type === selectedType);
+    const newNode: Node<FlowNodeData> = {
       id: `${selectedType}-${Date.now()}`,
       type: selectedType,
       position: { x: 100 + Math.random() * 300, y: 100 + Math.random() * 200 },
-      data: { label: nodeLabel || NODE_TYPES_LIST.find((n) => n.type === selectedType)?.label },
+      data: { label: nodeLabel.trim() || meta?.label || selectedType },
     };
     setNodes((nds) => [...nds, newNode]);
     setNodeLabel("");
@@ -114,7 +195,20 @@ export function FlowEditorPage() {
     setSaving(true);
     try {
       await flowsApi.update(token, id, {
-        graph: { nodes: nodes as Flow["graph"]["nodes"], edges: edges as Flow["graph"]["edges"] },
+        graph: {
+          nodes: nodes.map((n) => ({
+            id: n.id,
+            type: n.type ?? "send_text",
+            position: n.position,
+            data: (n.data ?? {}) as Record<string, unknown>,
+          })),
+          edges: edges.map((e) => ({
+            id: e.id,
+            source: e.source,
+            target: e.target,
+            sourceHandle: e.sourceHandle ?? undefined,
+          })),
+        },
       });
       setError(null);
     } catch (err) {
@@ -150,17 +244,21 @@ export function FlowEditorPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button type="button" className={btnSecondary} onClick={toggleActive}>
+          <button type="button" className={btnSecondary} onClick={() => void toggleActive()}>
             {flow.isActive ? "Desativar" : "Ativar"}
           </button>
-          <button type="button" className={btnPrimary} onClick={handleSave} disabled={saving}>
+          <button type="button" className={btnPrimary} onClick={() => void handleSave()} disabled={saving}>
             <Save className="mr-1.5 inline h-4 w-4" />
             {saving ? "Salvando..." : "Salvar"}
           </button>
         </div>
       </div>
 
-      {error ? <div className="mb-3"><ErrorState message={error} /></div> : null}
+      {error ? (
+        <div className="mb-3">
+          <ErrorState message={error} />
+        </div>
+      ) : null}
 
       <div className="mb-3 flex flex-wrap items-end gap-2 rounded-lg border border-[var(--abs-gray)] bg-white p-3">
         <select className={selectClass} value={selectedType} onChange={(e) => setSelectedType(e.target.value)}>
@@ -181,7 +279,7 @@ export function FlowEditorPage() {
         </button>
       </div>
 
-      <div className="min-h-0 flex-1 rounded-xl border border-[var(--abs-gray)] bg-white">
+      <div className="min-h-[420px] flex-1 rounded-xl border border-[var(--abs-gray)] bg-[#f8fafc]">
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -189,14 +287,25 @@ export function FlowEditorPage() {
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           nodeTypes={nodeTypes}
+          defaultEdgeOptions={defaultEdgeOptions}
           fitView
-          colorMode="dark"
+          proOptions={{ hideAttribution: true }}
         >
-          <Background />
+          <Background gap={16} color="#cbd5e1" />
           <Controls />
-          <MiniMap nodeColor="#22c55e" maskColor="rgba(15,23,42,0.8)" />
+          <MiniMap nodeColor="#0033b5" maskColor="rgba(15,23,42,0.35)" />
         </ReactFlow>
       </div>
     </div>
+  );
+}
+
+export function FlowEditorPage() {
+  return (
+    <FlowEditorErrorBoundary>
+      <ReactFlowProvider>
+        <FlowEditorCanvas />
+      </ReactFlowProvider>
+    </FlowEditorErrorBoundary>
   );
 }

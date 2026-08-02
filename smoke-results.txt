@@ -1,0 +1,2 @@
+﻿Summary: 19 / 19 PASS
+Health, Auth, Dashboard/Relatorios (flat keys + in/out), Inbox list/send/demo, Kanban, Contatos, Automacoes list+editor API+SPA, Agente IA, Campanhas, Pagamentos, WhatsApp instances, QR demo PT, Config QR WhatsApp (base64), Evolution API up

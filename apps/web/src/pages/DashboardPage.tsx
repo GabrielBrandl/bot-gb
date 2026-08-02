@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { MessageSquare, Users, Megaphone, CreditCard } from "lucide-react";
+import {
+  ArrowDownLeft,
+  ArrowUpRight,
+  CreditCard,
+  Megaphone,
+  MessageSquare,
+  Users,
+} from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { reportsApi, tenantsApi } from "../lib/api";
 import type { ReportsOverview, Tenant } from "../lib/types";
@@ -32,12 +39,29 @@ export function DashboardPage() {
 
   if (loading) return <LoadingState />;
 
+  const volume = reports
+    ? [
+        {
+          label: "Mensagens recebidas (entrada)",
+          value: reports.messagesInbound ?? 0,
+          icon: ArrowDownLeft,
+          tone: "border-l-[var(--abs-blue)]",
+        },
+        {
+          label: "Mensagens enviadas (saída)",
+          value: reports.messagesOutbound ?? 0,
+          icon: ArrowUpRight,
+          tone: "border-l-[var(--abs-yellow)]",
+        },
+      ]
+    : [];
+
   const stats = reports
     ? [
-        { label: "Conversas abertas", value: reports.conversationsOpen, icon: MessageSquare, to: "/inbox" },
-        { label: "Contatos", value: reports.contactsTotal, icon: Users, to: "/contatos" },
-        { label: "Campanhas ativas", value: reports.campaignsActive, icon: Megaphone, to: "/campanhas" },
-        { label: "Pagamentos pendentes", value: reports.paymentsPending, icon: CreditCard, to: "/pagamentos" },
+        { label: "Conversas abertas", value: reports.conversationsOpen ?? 0, icon: MessageSquare, to: "/inbox" },
+        { label: "Contatos", value: reports.contactsTotal ?? 0, icon: Users, to: "/contatos" },
+        { label: "Campanhas ativas", value: reports.campaignsActive ?? 0, icon: Megaphone, to: "/campanhas" },
+        { label: "Pagamentos pendentes", value: reports.paymentsPending ?? 0, icon: CreditCard, to: "/pagamentos" },
       ]
     : [];
 
@@ -45,10 +69,30 @@ export function DashboardPage() {
     <div>
       <PageHeader
         title="Início"
-        description={`Bem-vindo, ${user?.name ?? "usuário"}. Visão geral da sua operação.`}
+        description={`Bem-vindo, ${user?.name ?? "usuário"}. Visão geral da operação ABS Resolve.`}
       />
 
-      {error ? <div className="mb-4"><ErrorState message={error} /></div> : null}
+      {error ? (
+        <div className="mb-4">
+          <ErrorState message={error} />
+        </div>
+      ) : null}
+
+      {volume.length > 0 ? (
+        <section className="mb-6 grid gap-4 sm:grid-cols-2">
+          {volume.map(({ label, value, icon: Icon, tone }) => (
+            <Card key={label} className={`border-l-4 ${tone}`}>
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-sm text-[var(--abs-muted)]">{label}</p>
+                  <p className="mt-1 text-3xl font-semibold text-[var(--abs-blue-dark)]">{value}</p>
+                </div>
+                <Icon className="h-5 w-5 text-[var(--abs-blue)]/70" />
+              </div>
+            </Card>
+          ))}
+        </section>
+      ) : null}
 
       {stats.length > 0 ? (
         <section className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -103,6 +147,12 @@ export function DashboardPage() {
                 <dt className="text-[var(--abs-muted)]">Slug</dt>
                 <dd>{tenant.slug}</dd>
               </div>
+              {reports ? (
+                <div className="flex justify-between gap-4">
+                  <dt className="text-[var(--abs-muted)]">Mensagens hoje</dt>
+                  <dd>{reports.messagesToday ?? 0}</dd>
+                </div>
+              ) : null}
             </dl>
           ) : (
             <p className="mt-4 text-sm text-[var(--abs-muted)]">Dados da empresa indisponíveis.</p>
@@ -117,6 +167,7 @@ export function DashboardPage() {
             { to: "/inbox", label: "Abrir Inbox" },
             { to: "/kanban", label: "Ver Kanban" },
             { to: "/automacoes", label: "Automações" },
+            { to: "/pagamentos", label: "Pagamentos" },
             { to: "/configuracoes", label: "Configurações" },
           ].map(({ to, label }) => (
             <Link

@@ -28,8 +28,14 @@ export function SettingsPage() {
 
   // WhatsApp
   const [instanceName, setInstanceName] = useState("");
-  const [qrData, setQrData] = useState<{ base64?: string; code?: string } | null>(null);
+  const [qrData, setQrData] = useState<{
+    base64?: string | null;
+    code?: string | null;
+    pairingCode?: string | null;
+    message?: string;
+  } | null>(null);
   const [qrInstanceId, setQrInstanceId] = useState<string | null>(null);
+  const [qrLoading, setQrLoading] = useState(false);
 
   // Marca
   const [logoUrl, setLogoUrl] = useState("");
@@ -68,22 +74,46 @@ export function SettingsPage() {
     e.preventDefault();
     if (!token || !instanceName.trim()) return;
     try {
-      await whatsappApi.createInstance(token, instanceName.trim());
+      setError(null);
+      setQrLoading(true);
+      const created = await whatsappApi.createInstance(token, instanceName.trim());
       setInstanceName("");
+      setQrInstanceId(created.id);
+      const immediateQr = (created as WhatsappInstance & {
+        qr?: { base64?: string | null; code?: string | null; pairingCode?: string | null };
+      }).qr;
+      if (immediateQr?.base64 || immediateQr?.code || immediateQr?.pairingCode) {
+        setQrData(immediateQr);
+      }
       await load();
+      await handleShowQr(created.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao criar instância");
+      setQrLoading(false);
     }
   }
 
   async function handleShowQr(id: string) {
     if (!token) return;
+    setQrLoading(true);
+    setQrInstanceId(id);
+    setError(null);
     try {
-      const qr = await whatsappApi.getQr(token, id);
+      let qr = await whatsappApi.getQr(token, id);
+      // One extra client-side retry — Evolution can lag a second after create/connect.
+      if (!qr.base64 && !qr.code && !qr.pairingCode && !qr.message?.includes("demo")) {
+        await new Promise((r) => setTimeout(r, 1200));
+        qr = await whatsappApi.getQr(token, id);
+      }
       setQrData(qr);
-      setQrInstanceId(id);
+      if (!qr.base64 && !qr.code && !qr.pairingCode && qr.message) {
+        setError(qr.message);
+      }
     } catch (err) {
+      setQrData(null);
       setError(err instanceof Error ? err.message : "Erro ao obter QR Code");
+    } finally {
+      setQrLoading(false);
     }
   }
 
@@ -160,81 +190,140 @@ export function SettingsPage() {
       {tab === "whatsapp" && (
         <div className="space-y-6">
           <Card>
-            <h2 className="mb-4 text-lg font-medium text-[var(--abs-blue-dark)]">Instâncias WhatsApp</h2>
+            <h2 className="mb-2 text-lg font-medium text-[var(--abs-blue-dark)]">Instâncias WhatsApp</h2>
+            <ol className="mb-4 list-decimal space-y-1 pl-5 text-sm text-[var(--abs-muted)]">
+              <li>Crie uma nova instância (não use a demo para QR real).</li>
+              <li>Clique no ícone de QR e escaneie com o WhatsApp do celular.</li>
+              <li>Aguarde o status mudar para Conectado; use Atualizar se necessário.</li>
+            </ol>
             <form onSubmit={handleCreateInstance} className="mb-4 flex flex-wrap gap-2">
               <input
                 className={`${inputClass} max-w-xs`}
-                placeholder="Nome da instância"
+                placeholder="Nome da instância (ex: ABS Principal)"
                 value={instanceName}
                 onChange={(e) => setInstanceName(e.target.value)}
+                required
               />
-              <button type="submit" className={btnPrimary}>
+              <button type="submit" className={btnPrimary} disabled={qrLoading}>
                 <Plus className="mr-1.5 inline h-4 w-4" />
-                Criar instância
+                {qrLoading ? "Gerando QR..." : "Criar e gerar QR"}
               </button>
             </form>
             <p className="mb-4 text-xs text-[var(--abs-muted)]">
-              Modo demo: use &quot;Simular mensagem&quot; na Inbox sem conectar WhatsApp real.
+              A instância &quot;demo&quot; já vem conectada para testes internos. Para WhatsApp real, crie outra
+              instância com Evolution API no ar (Docker local ou EasyPanel).
             </p>
             {instances.length === 0 ? (
               <p className="text-sm text-[var(--abs-muted)]">Nenhuma instância configurada.</p>
             ) : (
               <div className="space-y-3">
-                {instances.map((inst) => (
-                  <div
-                    key={inst.id}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--abs-gray)] bg-white/50 p-4"
-                  >
-                    <div>
-                      <p className="font-medium text-[var(--abs-blue-dark)]">{inst.name}</p>
-                      {inst.phone ? <p className="text-xs text-[var(--abs-muted)]">{inst.phone}</p> : null}
+                {instances.map((inst) => {
+                  const isDemo = String(inst.evolutionInstanceId || "").startsWith("demo-");
+                  return (
+                    <div
+                      key={inst.id}
+                      className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--abs-gray)] bg-white/50 p-4"
+                    >
+                      <div>
+                        <p className="font-medium text-[var(--abs-blue-dark)]">
+                          {inst.name}
+                          {isDemo ? (
+                            <span className="ml-2 text-xs font-normal text-[var(--abs-muted)]">(demo)</span>
+                          ) : null}
+                        </p>
+                        {inst.phone ? <p className="text-xs text-[var(--abs-muted)]">{inst.phone}</p> : null}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant={statusBadgeVariant(inst.status)}>
+                          {statusLabel(inst.status)}
+                        </Badge>
+                        <button
+                          type="button"
+                          className={btnSecondary}
+                          title="Mostrar QR Code"
+                          onClick={() => handleShowQr(inst.id)}
+                        >
+                          <QrCode className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          className={btnSecondary}
+                          title="Atualizar status"
+                          onClick={() => handleRefresh(inst.id)}
+                        >
+                          <RefreshCw className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          className={btnDanger}
+                          title="Remover"
+                          onClick={() => handleDelete(inst.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Badge variant={statusBadgeVariant(inst.status)}>
-                        {statusLabel(inst.status)}
-                      </Badge>
-                      <button type="button" className={btnSecondary} onClick={() => handleShowQr(inst.id)}>
-                        <QrCode className="h-4 w-4" />
-                      </button>
-                      <button type="button" className={btnSecondary} onClick={() => handleRefresh(inst.id)}>
-                        <RefreshCw className="h-4 w-4" />
-                      </button>
-                      <button type="button" className={btnDanger} onClick={() => handleDelete(inst.id)}>
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </Card>
 
+          {qrLoading ? (
+            <Card>
+              <p className="text-sm text-[var(--abs-muted)]">
+                Gerando QR Code via Evolution API… isso pode levar alguns segundos.
+              </p>
+            </Card>
+          ) : null}
+
           {qrData ? (
             <Card>
-              <h3 className="mb-4 font-medium text-[var(--abs-blue-dark)]">QR Code — escaneie no WhatsApp</h3>
+              <h3 className="mb-2 font-medium text-[var(--abs-blue-dark)]">QR Code — escaneie no WhatsApp</h3>
+              <p className="mb-4 text-sm text-[var(--abs-muted)]">
+                No celular: WhatsApp → Aparelhos conectados → Conectar um aparelho.
+              </p>
               {qrData.base64 ? (
                 <img
                   src={qrData.base64.startsWith("data:") ? qrData.base64 : `data:image/png;base64,${qrData.base64}`}
                   alt="QR Code WhatsApp"
-                  className="mx-auto max-w-[280px] rounded-lg"
+                  className="mx-auto max-w-[280px] rounded-lg border border-[var(--abs-gray)] bg-white p-3"
                 />
-              ) : qrData.code ? (
-                <pre className="overflow-x-auto rounded-lg bg-white p-4 text-xs text-slate-600">
+              ) : null}
+              {qrData.pairingCode ? (
+                <p className="mt-3 text-center text-sm text-[var(--abs-blue-dark)]">
+                  Código de pareamento: <span className="font-mono font-semibold">{qrData.pairingCode}</span>
+                </p>
+              ) : null}
+              {!qrData.base64 && qrData.code ? (
+                <pre className="mt-3 overflow-x-auto rounded-lg bg-white p-4 text-xs text-slate-600">
                   {qrData.code}
                 </pre>
-              ) : (
-                <p className="text-sm text-[var(--abs-muted)]">QR Code indisponível.</p>
-              )}
-              <button
-                type="button"
-                className={`${btnSecondary} mt-4`}
-                onClick={() => {
-                  setQrData(null);
-                  setQrInstanceId(null);
-                }}
-              >
-                Fechar
-              </button>
+              ) : null}
+              {!qrData.base64 && !qrData.code && !qrData.pairingCode ? (
+                <p className="text-sm text-[var(--abs-muted)]">
+                  {qrData.message ??
+                    "QR Code indisponível. Confirme que o container evolution-api está no ar e tente Atualizar QR."}
+                </p>
+              ) : null}
+              <div className="mt-4 flex flex-wrap gap-2">
+                {qrInstanceId ? (
+                  <button type="button" className={btnSecondary} onClick={() => handleShowQr(qrInstanceId)}>
+                    <RefreshCw className="mr-1.5 inline h-4 w-4" />
+                    Atualizar QR
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className={btnSecondary}
+                  onClick={() => {
+                    setQrData(null);
+                    setQrInstanceId(null);
+                  }}
+                >
+                  Fechar
+                </button>
+              </div>
             </Card>
           ) : null}
         </div>

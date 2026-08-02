@@ -1,4 +1,6 @@
 services:
+  # Local stack. On EasyPanel: create ONE service per entry below (api, worker, web,
+  # redis, evolution-api; DB = Supabase OR postgres). See docs/DEPLOY_EASYPANEL.md.
   postgres:
     image: pgvector/pgvector:pg16
     container_name: bot-wpp-postgres
@@ -12,6 +14,7 @@ services:
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./init-evolution-db.sql:/docker-entrypoint-initdb.d/01-evolution.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d bot_wpp"]
       interval: 5s
@@ -48,8 +51,11 @@ services:
       API_PORT: 3000
       CORS_ORIGIN: http://localhost:5173
       EVOLUTION_API_URL: http://evolution-api:8080
+      EVOLUTION_WEBHOOK_URL: http://api:3000/api/whatsapp/webhook
     ports:
       - "3000:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy
@@ -68,6 +74,7 @@ services:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/bot_wpp?schema=public
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      EVOLUTION_API_URL: http://evolution-api:8080
     depends_on:
       postgres:
         condition: service_healthy
@@ -78,23 +85,24 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile.web
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:3000/api}
+        VITE_WS_URL: ${VITE_WS_URL:-http://localhost:3000}
     container_name: bot-wpp-web
     restart: unless-stopped
-    environment:
-      VITE_API_URL: http://localhost:3000/api
-      VITE_WS_URL: http://localhost:3000
     ports:
       - "5173:80"
     depends_on:
       - api
 
   # Official image: https://hub.docker.com/r/evoapicloud/evolution-api
+  # EasyPanel: same image as a separate app; set SERVER_URL to public https://evo.…
   evolution-api:
     image: evoapicloud/evolution-api:v2.3.7
     container_name: bot-wpp-evolution
     restart: unless-stopped
     environment:
-      SERVER_URL: http://localhost:8080
+      SERVER_URL: ${EVOLUTION_SERVER_URL:-http://localhost:8080}
       AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY:-dev-evolution-key}
       DATABASE_ENABLED: "true"
       DATABASE_PROVIDER: postgresql

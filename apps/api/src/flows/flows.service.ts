@@ -41,7 +41,12 @@ export class FlowsService {
     data: Partial<{ name: string; trigger: string; nodes: object; active: boolean }>,
   ) {
     await this.getOne(tenantId, id);
-    return this.prisma.flow.update({ where: { id }, data });
+    const payload: Record<string, unknown> = {};
+    if (data.name !== undefined) payload.name = data.name;
+    if (data.trigger !== undefined) payload.trigger = data.trigger;
+    if (data.nodes !== undefined) payload.nodes = data.nodes;
+    if (data.active !== undefined) payload.active = data.active;
+    return this.prisma.flow.update({ where: { id }, data: payload });
   }
 
   async remove(tenantId: string, id: string) {

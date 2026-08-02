@@ -55,6 +55,12 @@ export class PaymentsController {
     return this.paymentsService.list(user.tenantId);
   }
 
+  @Get("config")
+  @UseGuards(JwtAuthGuard)
+  config() {
+    return this.paymentsService.getConfig();
+  }
+
   @Post()
   @UseGuards(JwtAuthGuard)
   create(@CurrentUser() user: AuthUser, @Body() dto: CreatePaymentDto) {

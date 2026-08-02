@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Plus, GitBranch } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { flowsApi } from "../lib/api";
@@ -18,6 +18,7 @@ import {
 
 export function FlowsPage() {
   const { token } = useAuth();
+  const navigate = useNavigate();
   const [flows, setFlows] = useState<Flow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -68,7 +69,7 @@ export function FlowsPage() {
       setDescription("");
       setShowForm(false);
       await load();
-      window.location.href = `/automacoes/${flow.id}`;
+      navigate(`/automacoes/${flow.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao criar automação");
     } finally {
@@ -134,7 +135,7 @@ export function FlowsPage() {
                   <p className="mt-1 text-sm text-[var(--abs-muted)]">{flow.description}</p>
                 ) : null}
                 <p className="mt-3 text-xs text-[var(--abs-muted)]">
-                  {flow.graph.nodes.length} nós · {flow.graph.edges.length} conexões
+                  {(flow.graph?.nodes?.length ?? 0)} nós · {(flow.graph?.edges?.length ?? 0)} conexões
                 </p>
               </Card>
             </Link>

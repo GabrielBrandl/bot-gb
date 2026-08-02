@@ -27,6 +27,15 @@ export class KanbanService {
     });
   }
 
+  async getBoard(tenantId: string) {
+    const boards = await this.getBoards(tenantId);
+    const board = boards[0];
+    if (!board) {
+      throw new NotFoundException("Nenhum board Kanban encontrado");
+    }
+    return board;
+  }
+
   async createCard(
     tenantId: string,
     data: {

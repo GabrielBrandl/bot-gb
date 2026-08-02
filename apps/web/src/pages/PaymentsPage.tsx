@@ -32,14 +32,22 @@ export function PaymentsPage() {
   const [billingType, setBillingType] = useState<BillingType>("PIX");
   const [sendViaWhatsApp, setSendViaWhatsApp] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [demoMode, setDemoMode] = useState(false);
+  const [demoMessage, setDemoMessage] = useState("");
 
   async function load() {
     if (!token) return;
     setLoading(true);
     try {
-      const [p, c] = await Promise.all([paymentsApi.list(token), contactsApi.list(token)]);
+      const [p, c, cfg] = await Promise.all([
+        paymentsApi.list(token),
+        contactsApi.list(token),
+        paymentsApi.config(token).catch(() => null),
+      ]);
       setPayments(p);
       setContacts(c);
+      setDemoMode(Boolean(cfg?.demoMode));
+      setDemoMessage(cfg?.message ?? "");
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao carregar pagamentos");
@@ -99,6 +107,15 @@ export function PaymentsPage() {
         <div className="mb-4">
           <ErrorState message={error} />
         </div>
+      ) : null}
+
+      {demoMode ? (
+        <Card className="mb-4 border-[var(--abs-yellow)]/60 bg-[var(--abs-yellow)]/10">
+          <p className="text-sm text-[var(--abs-blue-dark)]">
+            {demoMessage ||
+              "Modo demo ASAAS ativo. Defina ASAAS_API_KEY no .env (local) ou nas variáveis do serviço api no EasyPanel."}
+          </p>
+        </Card>
       ) : null}
 
       {showForm ? (

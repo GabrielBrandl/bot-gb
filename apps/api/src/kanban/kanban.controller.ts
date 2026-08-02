@@ -57,6 +57,12 @@ export class KanbanController {
     return this.kanbanService.getBoards(user.tenantId);
   }
 
+  /** Frontend expects a single board at /kanban/board */
+  @Get("board")
+  getBoard(@CurrentUser() user: AuthUser) {
+    return this.kanbanService.getBoard(user.tenantId);
+  }
+
   @Post("cards")
   createCard(@CurrentUser() user: AuthUser, @Body() dto: CreateCardDto) {
     return this.kanbanService.createCard(user.tenantId, dto);

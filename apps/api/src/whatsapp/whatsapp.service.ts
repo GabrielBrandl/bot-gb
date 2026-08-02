@@ -1,4 +1,11 @@
-import { Inject, Injectable, NotFoundException, BadRequestException, forwardRef } from "@nestjs/common";
+import {
+  Inject,
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  forwardRef,
+  Logger,
+} from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { PrismaService } from "../prisma/prisma.service";
 import { RealtimeService } from "../realtime/realtime.service";
@@ -16,6 +23,8 @@ export interface InboundMessageInput {
 
 @Injectable()
 export class WhatsappService {
+  private readonly logger = new Logger(WhatsappService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly evolution: EvolutionClient,
@@ -25,11 +34,30 @@ export class WhatsappService {
     private readonly flowExecutor: FlowExecutorService,
   ) {}
 
-  listInstances(tenantId: string) {
-    return this.prisma.whatsappInstance.findMany({
+  private toInstanceResponse<T extends { phoneNumber?: string | null }>(instance: T) {
+    return {
+      ...instance,
+      phone: instance.phoneNumber ?? null,
+    };
+  }
+
+  private resolveWebhookUrl(): string {
+    const configured = this.config.get<string>("EVOLUTION_WEBHOOK_URL");
+    if (configured?.trim()) {
+      return configured.trim();
+    }
+    const apiPrefix = this.config.get<string>("API_PREFIX", "api");
+    const port = this.config.get<number>("API_PORT", 3000);
+    // Evolution runs in Docker; host.docker.internal reaches the API on the host (Windows/Mac).
+    return `http://host.docker.internal:${port}/${apiPrefix}/whatsapp/webhook`;
+  }
+
+  async listInstances(tenantId: string) {
+    const instances = await this.prisma.whatsappInstance.findMany({
       where: { tenantId },
       orderBy: { createdAt: "desc" },
     });
+    return instances.map((i) => this.toInstanceResponse(i));
   }
 
   async createInstance(tenantId: string, name: string) {
@@ -39,24 +67,35 @@ export class WhatsappService {
       throw new BadRequestException("Limite de instâncias WhatsApp atingido para o plano atual");
     }
 
-    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "wa";
     const evolutionInstanceId = `${tenantId.slice(0, 8)}-${slug}-${Date.now()}`;
 
-    await this.evolution.createInstance(evolutionInstanceId);
+    const created = await this.evolution.createInstance(evolutionInstanceId);
 
-    const apiPrefix = this.config.get<string>("API_PREFIX", "api");
-    const port = this.config.get<number>("API_PORT", 3000);
-    const webhookUrl = `http://localhost:${port}/${apiPrefix}/whatsapp/webhook`;
-    await this.evolution.setWebhook(evolutionInstanceId, webhookUrl);
+    const webhookUrl = this.resolveWebhookUrl();
+    try {
+      await this.evolution.setWebhook(created.instanceName, webhookUrl);
+    } catch (error) {
+      this.logger.warn(
+        `Webhook não configurado para ${created.instanceName} (${webhookUrl}): ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
 
-    return this.prisma.whatsappInstance.create({
+    const instance = await this.prisma.whatsappInstance.create({
       data: {
         tenantId,
         name,
-        evolutionInstanceId,
+        evolutionInstanceId: created.instanceName,
         status: "connecting",
       },
     });
+
+    return {
+      ...this.toInstanceResponse(instance),
+      qr: created.qr ?? null,
+    };
   }
 
   async getInstance(tenantId: string, id: string) {
@@ -72,20 +111,63 @@ export class WhatsappService {
   async getQrCode(tenantId: string, id: string) {
     const instance = await this.getInstance(tenantId, id);
     if (instance.evolutionInstanceId.startsWith("demo-")) {
-      return { base64: null, message: "Instância demo já está conectada" };
+      return {
+        base64: null,
+        code: null,
+        pairingCode: null,
+        message:
+          "Esta é a instância demo (já conectada). Crie uma nova instância WhatsApp para gerar um QR Code real.",
+      };
     }
-    return this.evolution.getQrCode(instance.evolutionInstanceId);
+
+    const qr = await this.evolution.getQrCode(instance.evolutionInstanceId);
+    if (!qr.base64 && !qr.code && !qr.pairingCode) {
+      const state = await this.evolution.getConnectionState(instance.evolutionInstanceId).catch(() => null);
+      const rawState = state?.instance?.state ?? state?.state;
+      if (rawState === "open") {
+        await this.prisma.whatsappInstance.update({
+          where: { id: instance.id },
+          data: { status: "connected" },
+        });
+        return {
+          base64: null,
+          code: null,
+          pairingCode: null,
+          message: "WhatsApp já está conectado. Não é necessário escanear o QR Code.",
+        };
+      }
+      return {
+        base64: null,
+        code: null,
+        pairingCode: null,
+        message:
+          "QR Code ainda não disponível. Aguarde alguns segundos e clique em Atualizar QR, ou crie uma nova instância.",
+      };
+    }
+
+    await this.prisma.whatsappInstance.update({
+      where: { id: instance.id },
+      data: { status: "connecting" },
+    });
+
+    return {
+      base64: qr.base64 ?? null,
+      code: qr.code ?? null,
+      pairingCode: qr.pairingCode ?? null,
+      message: qr.message,
+    };
   }
 
   async refreshStatus(tenantId: string, id: string) {
     const instance = await this.getInstance(tenantId, id);
     if (instance.evolutionInstanceId.startsWith("demo-")) {
-      return instance;
+      return this.toInstanceResponse(instance);
     }
 
     const state = await this.evolution.getConnectionState(instance.evolutionInstanceId);
     const rawState = state.instance?.state ?? state.state ?? "disconnected";
-    const status = rawState === "open" ? "connected" : rawState === "connecting" ? "connecting" : "disconnected";
+    const status =
+      rawState === "open" ? "connected" : rawState === "connecting" ? "connecting" : "disconnected";
 
     const updated = await this.prisma.whatsappInstance.update({
       where: { id: instance.id },
@@ -97,13 +179,21 @@ export class WhatsappService {
       status: updated.status,
     });
 
-    return updated;
+    return this.toInstanceResponse(updated);
   }
 
   async disconnect(tenantId: string, id: string) {
     const instance = await this.getInstance(tenantId, id);
     if (!instance.evolutionInstanceId.startsWith("demo-")) {
-      await this.evolution.deleteInstance(instance.evolutionInstanceId);
+      try {
+        await this.evolution.deleteInstance(instance.evolutionInstanceId);
+      } catch (error) {
+        this.logger.warn(
+          `Falha ao remover instância Evolution ${instance.evolutionInstanceId}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
     }
     await this.prisma.whatsappInstance.delete({ where: { id: instance.id } });
     return { ok: true };
@@ -111,6 +201,30 @@ export class WhatsappService {
 
   async processWebhook(body: Record<string, unknown>) {
     const event = body.event as string | undefined;
+    if (event === "connection.update" || event === "CONNECTION_UPDATE") {
+      const instanceName = (body.instance as string) ?? "";
+      const data = body.data as Record<string, unknown> | undefined;
+      const state = (data?.state as string) ?? (data?.status as string);
+      if (instanceName && state) {
+        const instance = await this.prisma.whatsappInstance.findFirst({
+          where: { evolutionInstanceId: instanceName },
+        });
+        if (instance) {
+          const status =
+            state === "open" ? "connected" : state === "connecting" ? "connecting" : "disconnected";
+          await this.prisma.whatsappInstance.update({
+            where: { id: instance.id },
+            data: { status },
+          });
+          this.realtime.emitToTenant(instance.tenantId, "instance:status", {
+            instanceId: instance.id,
+            status,
+          });
+        }
+      }
+      return { ok: true };
+    }
+
     if (event !== "messages.upsert" && event !== "MESSAGES_UPSERT") {
       return { ok: true, skipped: true };
     }
@@ -136,7 +250,7 @@ export class WhatsappService {
     const message = data?.message as Record<string, unknown> | undefined;
     const text =
       (message?.conversation as string) ??
-      ((message?.extendedTextMessage as { text?: string })?.text) ??
+      (message?.extendedTextMessage as { text?: string })?.text ??
       "";
 
     const phone = (key.remoteJid ?? "").replace("@s.whatsapp.net", "").replace(/\D/g, "");
@@ -245,7 +359,7 @@ export class WhatsappService {
       await this.getInstance(tenantId, instanceId);
     }
 
-    return this.handleInbound({
+    const result = await this.handleInbound({
       tenantId,
       instanceId,
       phone: input.phone,
@@ -253,6 +367,13 @@ export class WhatsappService {
       text: input.text,
       externalId: `demo-${Date.now()}`,
     });
+
+    return {
+      ...result,
+      conversationId: result.conversation.id,
+      contactId: result.contact.id,
+      messageId: result.message.id,
+    };
   }
 
   isDemoInstance(evolutionInstanceId: string): boolean {

@@ -1,4 +1,15 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from "@nestjs/common";
 import { IsBoolean, IsOptional, IsString, MinLength } from "class-validator";
 import type { AuthUser } from "@bot-wpp/shared-types";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
@@ -15,8 +26,14 @@ class CreateAgentDto {
   @MinLength(1)
   persona!: string;
 
+  @IsOptional()
   @IsString()
-  modelProvider!: string;
+  modelProvider?: string;
+
+  /** Frontend alias for modelProvider */
+  @IsOptional()
+  @IsString()
+  provider?: string;
 
   @IsOptional()
   @IsString()
@@ -25,6 +42,10 @@ class CreateAgentDto {
   @IsOptional()
   @IsBoolean()
   active?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }
 
 class UpdateAgentDto {
@@ -42,11 +63,27 @@ class UpdateAgentDto {
 
   @IsOptional()
   @IsString()
+  provider?: string;
+
+  @IsOptional()
+  @IsString()
   systemPrompt?: string;
 
   @IsOptional()
   @IsBoolean()
   active?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+}
+
+function toAgentResponse<T extends { modelProvider: string; active: boolean }>(agent: T) {
+  return {
+    ...agent,
+    provider: agent.modelProvider,
+    isActive: agent.active,
+  };
 }
 
 class AskDto {
@@ -82,18 +119,41 @@ export class AiController {
   ) {}
 
   @Get("agents")
-  listAgents(@CurrentUser() user: AuthUser) {
-    return this.aiService.listAgents(user.tenantId);
+  async listAgents(@CurrentUser() user: AuthUser) {
+    const agents = await this.aiService.listAgents(user.tenantId);
+    return agents.map(toAgentResponse);
   }
 
   @Post("agents")
-  createAgent(@CurrentUser() user: AuthUser, @Body() dto: CreateAgentDto) {
-    return this.aiService.createAgent(user.tenantId, dto);
+  async createAgent(@CurrentUser() user: AuthUser, @Body() dto: CreateAgentDto) {
+    const modelProvider = dto.modelProvider || dto.provider;
+    if (!modelProvider) {
+      throw new BadRequestException("Informe o provedor de IA (provider)");
+    }
+    const agent = await this.aiService.createAgent(user.tenantId, {
+      name: dto.name,
+      persona: dto.persona,
+      modelProvider,
+      systemPrompt: dto.systemPrompt,
+      active: dto.isActive ?? dto.active,
+    });
+    return toAgentResponse(agent);
   }
 
   @Patch("agents/:id")
-  updateAgent(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() dto: UpdateAgentDto) {
-    return this.aiService.updateAgent(user.tenantId, id, dto);
+  async updateAgent(
+    @CurrentUser() user: AuthUser,
+    @Param("id") id: string,
+    @Body() dto: UpdateAgentDto,
+  ) {
+    const agent = await this.aiService.updateAgent(user.tenantId, id, {
+      name: dto.name,
+      persona: dto.persona,
+      modelProvider: dto.modelProvider || dto.provider,
+      systemPrompt: dto.systemPrompt,
+      active: dto.isActive ?? dto.active,
+    });
+    return toAgentResponse(agent);
   }
 
   @Delete("agents/:id")

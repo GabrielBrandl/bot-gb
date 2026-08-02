@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "./lib/auth";
 import { AppLayout } from "./components/layout/AppLayout";
@@ -8,12 +9,17 @@ import { InboxPage } from "./pages/InboxPage";
 import { KanbanPage } from "./pages/KanbanPage";
 import { ContactsPage } from "./pages/ContactsPage";
 import { FlowsPage } from "./pages/FlowsPage";
-import { FlowEditorPage } from "./pages/FlowEditorPage";
 import { AiAgentsPage } from "./pages/AiAgentsPage";
 import { CampaignsPage } from "./pages/CampaignsPage";
 import { PaymentsPage } from "./pages/PaymentsPage";
 import { ReportsPage } from "./pages/ReportsPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { LoadingState } from "./components/ui/PageHeader";
+
+const FlowEditorPage = lazy(async () => {
+  const mod = await import("./pages/FlowEditorPage");
+  return { default: mod.FlowEditorPage };
+});
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -50,7 +56,14 @@ export function App() {
         <Route path="kanban" element={<KanbanPage />} />
         <Route path="contatos" element={<ContactsPage />} />
         <Route path="automacoes" element={<FlowsPage />} />
-        <Route path="automacoes/:id" element={<FlowEditorPage />} />
+        <Route
+          path="automacoes/:id"
+          element={
+            <Suspense fallback={<LoadingState message="Carregando editor..." />}>
+              <FlowEditorPage />
+            </Suspense>
+          }
+        />
         <Route path="agente-ia" element={<AiAgentsPage />} />
         <Route path="campanhas" element={<CampaignsPage />} />
         <Route path="pagamentos" element={<PaymentsPage />} />

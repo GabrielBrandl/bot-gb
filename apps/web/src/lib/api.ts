@@ -32,11 +32,16 @@ export const whatsappApi = {
       body: JSON.stringify({ name }),
     }, token),
   getQr: (token: string, id: string) =>
-    apiRequest<{ base64?: string; code?: string }>(`/whatsapp/instances/${id}/qr`, {}, token),
+    apiRequest<{
+      base64?: string | null;
+      code?: string | null;
+      pairingCode?: string | null;
+      message?: string;
+    }>(`/whatsapp/instances/${id}/qr`, {}, token),
   refresh: (token: string, id: string) =>
-    apiRequest<void>(`/whatsapp/instances/${id}/refresh`, { method: "POST" }, token),
+    apiRequest<WhatsappInstance>(`/whatsapp/instances/${id}/refresh`, { method: "POST" }, token),
   delete: (token: string, id: string) =>
-    apiRequest<void>(`/whatsapp/instances/${id}`, { method: "DELETE" }, token),
+    apiRequest<{ ok: boolean }>(`/whatsapp/instances/${id}`, { method: "DELETE" }, token),
   demoInbound: (token: string, data: { phone: string; name?: string; text: string; instanceId?: string }) =>
     apiRequest<{ conversationId?: string }>("/whatsapp/demo/inbound", {
       method: "POST",
@@ -162,6 +167,12 @@ export const campaignsApi = {
 // Payments
 export const paymentsApi = {
   list: (token: string) => apiRequest<Payment[]>("/payments", {}, token),
+  config: (token: string) =>
+    apiRequest<{ demoMode: boolean; billingTypes: string[]; message: string }>(
+      "/payments/config",
+      {},
+      token,
+    ),
   create: (
     token: string,
     data: {
@@ -173,7 +184,7 @@ export const paymentsApi = {
       sendViaWhatsApp?: boolean;
       conversationId?: string;
     },
-  ) => apiRequest<Payment>("/payments", { method: "POST", body: JSON.stringify(data) }, token),
+  ) => apiRequest<Payment & { demoMode?: boolean }>("/payments", { method: "POST", body: JSON.stringify(data) }, token),
 };
 
 // Reports

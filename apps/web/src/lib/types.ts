@@ -130,6 +130,8 @@ export interface ReportsOverview {
   conversationsPending: number;
   conversationsClosed: number;
   messagesToday: number;
+  messagesInbound: number;
+  messagesOutbound: number;
   contactsTotal: number;
   campaignsActive: number;
   paymentsPending: number;
@@ -161,7 +163,14 @@ export interface WhatsappInstance {
   name: string;
   status: WhatsappInstanceStatus;
   phone?: string | null;
+  evolutionInstanceId?: string;
   createdAt?: string;
+  qr?: {
+    base64?: string | null;
+    code?: string | null;
+    pairingCode?: string | null;
+    message?: string;
+  } | null;
 }
 
 export interface AuditEntry {

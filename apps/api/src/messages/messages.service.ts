@@ -11,6 +11,19 @@ export class MessagesService {
     private readonly evolution: EvolutionClient,
   ) {}
 
+  async list(tenantId: string, conversationId: string) {
+    const conversation = await this.prisma.conversation.findFirst({
+      where: { id: conversationId, tenantId },
+    });
+    if (!conversation) {
+      throw new NotFoundException("Conversa não encontrada");
+    }
+    return this.prisma.message.findMany({
+      where: { tenantId, conversationId },
+      orderBy: { createdAt: "asc" },
+    });
+  }
+
   async sendText(tenantId: string, conversationId: string, content: string, mediaUrl?: string) {
     const conversation = await this.prisma.conversation.findFirst({
       where: { id: conversationId, tenantId },

@@ -1,4 +1,4 @@
-import { Body, Controller, Param, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post, UseGuards } from "@nestjs/common";
 import { IsOptional, IsString, MinLength } from "class-validator";
 import type { AuthUser } from "@bot-wpp/shared-types";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
@@ -13,12 +13,25 @@ class SendMessageDto {
   @IsOptional()
   @IsString()
   mediaUrl?: string;
+
+  /** Accepted for frontend compatibility; persisted type is derived server-side. */
+  @IsOptional()
+  @IsString()
+  type?: string;
 }
 
 @Controller("conversations/:conversationId/messages")
 @UseGuards(JwtAuthGuard)
 export class MessagesController {
   constructor(private readonly messagesService: MessagesService) {}
+
+  @Get()
+  list(
+    @CurrentUser() user: AuthUser,
+    @Param("conversationId") conversationId: string,
+  ) {
+    return this.messagesService.list(user.tenantId, conversationId);
+  }
 
   @Post()
   send(

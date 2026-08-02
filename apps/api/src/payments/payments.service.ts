@@ -12,6 +12,16 @@ export class PaymentsService {
     private readonly messages: MessagesService,
   ) {}
 
+  getConfig() {
+    return {
+      demoMode: !this.asaas.isConfigured(),
+      billingTypes: ["PIX", "BOLETO", "CREDIT_CARD", "UNDEFINED"] as const,
+      message: this.asaas.isConfigured()
+        ? "ASAAS conectado."
+        : "Modo demo: defina ASAAS_API_KEY no .env (ou no EasyPanel) para cobranças reais. Links gerados são placeholders do sandbox.",
+    };
+  }
+
   list(tenantId: string) {
     return this.prisma.payment.findMany({
       where: { tenantId },
@@ -136,7 +146,11 @@ export class PaymentsService {
       }
     }
 
-    return payment;
+    return {
+      ...payment,
+      amount: Number(payment.amount),
+      demoMode: !this.asaas.isConfigured() || String(asaasPayment.id).startsWith("placeholder-"),
+    };
   }
 
   async handleWebhook(body: Record<string, unknown>) {
