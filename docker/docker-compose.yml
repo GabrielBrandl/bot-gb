@@ -1,16 +1,7 @@
+# Local development stack — keeps host ports + container_name for convenience.
+# EasyPanel production: use docker/docker-compose.easypanel.yml instead
+# (no ports / no container_name — see docs/DEPLOY_EASYPANEL.md).
 services:
-  # Local stack only. EasyPanel: ONE service per entry (api, worker, web, redis,
-  # evolution-api). DB = Supabase (recommended) OR optional postgres.
-  # Full guide: docs/DEPLOY_EASYPANEL.md
-  #
-  # EasyPanel env cheat-sheet (production placeholders):
-  #   api/worker: DATABASE_URL + DIRECT_URL (Supabase), REDIS_HOST=redis,
-  #     PUBLIC_API_URL=https://api.SEUDOMINIO.com,
-  #     EVOLUTION_WEBHOOK_URL=${PUBLIC_API_URL}/api/whatsapp/webhook,
-  #     EVOLUTION_API_URL=http://evolution-api:8080, CORS_ORIGIN=https://app.SEUDOMINIO.com
-  #   web build args: VITE_API_URL=https://api.SEUDOMINIO.com/api
-  #                   VITE_WS_URL=https://api.SEUDOMINIO.com
-  #   evolution-api: SERVER_URL=https://evo.SEUDOMINIO.com, CACHE_REDIS_URI=redis://redis:6379
   postgres:
     image: pgvector/pgvector:pg16
     container_name: bot-wpp-postgres

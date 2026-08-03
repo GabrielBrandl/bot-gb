@@ -1,25 +1,44 @@
 # Deploy no EasyPanel — ABS Resolve / Bot WPP
 
-Guia passo a passo em português para subir a plataforma no **EasyPanel** com **um serviço = um container**.
+Guia passo a passo em português para subir a plataforma no **EasyPanel**.
 
-O arquivo `docker/docker-compose.yml` é só para **desenvolvimento local**. Em produção você **não** sobe o compose inteiro: cria cada serviço abaixo no painel EasyPanel.
+**Arquivo Compose (recomendado):** no EasyPanel, campo **"Arquivo Docker Compose"**, use:
 
-**Banco de dados:** use o **Supabase** que você já tem no `.env` (recomendado). Não precisa criar Postgres no EasyPanel, a menos que queira (opcional).
+```text
+docker/docker-compose.easypanel.yml
+```
+
+Esse arquivo **não** tem `container_name` nem mapeamento de `ports:` no host — evita os avisos de conflito do EasyPanel. Domínios e portas públicas são atribuídos pelo painel. Serviços se falam pelo nome (`redis`, `api`, `evolution-api`, etc.).
+
+| Compose | Uso |
+|---------|-----|
+| `docker/docker-compose.easypanel.yml` | **Produção EasyPanel** (sem `ports` / sem `container_name`) |
+| `docker/docker-compose.yml` | **Somente local** (portas no host: 3000, 5173, 6380, 8080, 5433) |
+
+**Banco de dados:** use o **Supabase** (recomendado). O Postgres do compose EasyPanel fica atrás do profile `with-postgres` e **não sobe por padrão**.
 
 ---
 
-## 1. Arquitetura (o que criar no EasyPanel)
+## 1. O que colocar no formulário EasyPanel
 
-| # | Serviço | Tipo | Imagem / Build | Porta | Domínio público |
-|---|---------|------|----------------|------:|-----------------|
-| 1 | `redis` | Imagem Docker | `redis:7-alpine` | 6379 (interna) | — |
-| 2 | `evolution-api` | Imagem Docker | `evoapicloud/evolution-api:v2.3.7` | 8080 | `https://evo.SEUDOMINIO.com` |
-| 3 | `api` | App Git / Dockerfile | `docker/Dockerfile.api` · context = **raiz do repo** | 3000 | `https://api.SEUDOMINIO.com` |
-| 4 | `worker` | App Git / Dockerfile | `docker/Dockerfile.worker` · context = **raiz** | — | — (só rede interna) |
-| 5 | `web` | App Git / Dockerfile | `docker/Dockerfile.web` · context = **raiz** | 80 | `https://app.SEUDOMINIO.com` |
-| — | `postgres` | *(opcional)* | `pgvector/pgvector:pg16` | 5432 | — |
+1. Conecte o repositório GitHub: `GabrielBrandl/bot-wpp` (branch `master`).
+2. Campo **Arquivo Docker Compose** → `docker/docker-compose.easypanel.yml`
+3. Salve / faça deploy — os avisos de `container_name` e `ports` devem sumir.
+4. Configure **domínios** nos serviços públicos (`web`, `api`, `evolution-api`) apontando para as portas internas abaixo.
+5. Cole as variáveis de ambiente da seção **4** (Supabase, JWT, Evolution, etc.).
 
-Todos os serviços devem ficar no **mesmo App/Projeto** EasyPanel (mesma rede interna) para se falarem por hostname: `redis`, `evolution-api`, `api`.
+### Portas internas (EasyPanel mapeia domínio → porta do container)
+
+| Serviço | Porta interna | Domínio sugerido |
+|---------|--------------:|------------------|
+| `redis` | 6379 | — (só rede interna) |
+| `evolution-api` | 8080 | `https://evo.SEUDOMINIO.com` |
+| `api` | 3000 | `https://api.SEUDOMINIO.com` |
+| `worker` | — | — (só rede interna) |
+| `web` | 80 | `https://app.SEUDOMINIO.com` |
+| `postgres` | 5432 | — (opcional, profile `with-postgres`) |
+
+Todos os serviços do mesmo App/Projeto EasyPanel compartilham a rede e se resolvem por hostname.
 
 ### Domínios sugeridos
 
@@ -29,71 +48,55 @@ Todos os serviços devem ficar no **mesmo App/Projeto** EasyPanel (mesma rede in
 | `api.SEUDOMINIO.com` | `api` |
 | `evo.SEUDOMINIO.com` | `evolution-api` |
 
-Substitua `SEUDOMINIO.com` pelo seu domínio real. No EasyPanel, ative HTTPS (Let's Encrypt) em cada domínio.
+Substitua `SEUDOMINIO.com` pelo seu domínio real. Ative HTTPS (Let's Encrypt) em cada domínio.
 
 ---
 
-## 2. Ordem de deploy recomendada
+## 2. Ordem de deploy / verificação
 
-Siga **nesta ordem** (dependências sobem primeiro):
-
-1. **redis** — sobe em segundos; confirme health `PONG`.
-2. **evolution-api** — precisa do Redis; configure domínio `evo.…` e volume.
-3. **api** — precisa do Supabase + Redis + Evolution (hostname interno); rode e confira `/api/health`.
-4. **worker** — mesmas envs de DB/Redis/Evolution da API (sem domínio).
-5. **web** — build com URLs **públicas** da API; domínio `app.…`.
-6. **Webhooks** — Evolution (automático via `PUBLIC_API_URL` / `EVOLUTION_WEBHOOK_URL`) + ASAAS no painel ASAAS.
-7. **Testes** — login, QR WhatsApp, inbox, cobrança.
+1. Cole o path do compose → salve (warnings de `ports`/`container_name` devem desaparecer).
+2. Defina envs (seção 4) — especialmente `DATABASE_URL`, `DIRECT_URL`, `JWT_SECRET`, `EVOLUTION_API_KEY`.
+3. Domínios: `app.`, `api.`, `evo.` nas portas internas corretas.
+4. Deploy → confira `https://api.SEUDOMINIO.com/api/health`.
+5. Build args do `web`: `VITE_API_URL` e `VITE_WS_URL` públicos.
+6. Webhooks Evolution + ASAAS (seção 3.8).
+7. Testes: login, QR WhatsApp, inbox, cobrança.
 
 ---
 
 ## 3. Passo a passo no EasyPanel (UI)
 
-### 3.1 Criar o App / Projeto
+### 3.1 Criar o App / Projeto com Compose
 
 1. Abra o EasyPanel → **Create Project** (ou use um existente).
 2. Nome sugerido: `bot-wpp` ou `abs-resolve`.
 3. Conecte o repositório GitHub: `GabrielBrandl/bot-wpp` (branch `master`).
-4. Todos os serviços abaixo ficam **dentro deste mesmo projeto** (rede compartilhada).
+4. Em **Arquivo Docker Compose**, informe:
 
-### 3.2 Serviço `redis`
+```text
+docker/docker-compose.easypanel.yml
+```
 
-1. **+ Service** → **Docker Image**.
-2. Image: `redis:7-alpine`.
-3. Nome do serviço: `redis` (hostname interno = `redis`).
-4. Porta: `6379` (não precisa expor na internet).
-5. Volume (opcional, recomendado): mount `/data`.
-6. Deploy → aguarde healthy.
+5. Salve. Os serviços `redis`, `evolution-api`, `api`, `worker`, `web` aparecem a partir do compose.
+6. **Não** use `docker/docker-compose.yml` (local) no EasyPanel — ele tem `ports` e `container_name` e gera avisos/conflitos.
 
-**Env:** nenhuma obrigatória.
+### 3.2 Domínios e volumes
 
-### 3.3 Serviço `evolution-api`
+| Serviço | Domínio | Porta no painel | Volume |
+|---------|---------|----------------:|--------|
+| `web` | `app.SEUDOMINIO.com` | 80 | — |
+| `api` | `api.SEUDOMINIO.com` | 3000 | — |
+| `evolution-api` | `evo.SEUDOMINIO.com` | 8080 | `/evolution/instances` (obrigatório) |
+| `redis` | — | 6379 (interna) | `/data` (recomendado; já no compose) |
+| `worker` | — | — | — |
 
-1. **+ Service** → **Docker Image**.
-2. Image: `evoapicloud/evolution-api:v2.3.7`.
-3. Nome: `evolution-api`.
-4. Porta: `8080`.
-5. Domínio: `evo.SEUDOMINIO.com` → porta `8080` + HTTPS.
-6. Volume **obrigatório:** `/evolution/instances` (persiste sessões WhatsApp).
-7. Cole as variáveis da seção **4.4** abaixo.
-8. Deploy.
+> `SERVER_URL` da Evolution deve ser a URL **pública** HTTPS (`https://evo.SEUDOMINIO.com`), não o hostname interno.
 
-> `SERVER_URL` deve ser a URL **pública** HTTPS (`https://evo.SEUDOMINIO.com`), não o hostname interno.
+### 3.3 Healthcheck da API
 
-### 3.4 Serviço `api`
+Se o painel pedir: HTTP `GET /api/health` na porta `3000`.
 
-1. **+ Service** → **App** (Git / Dockerfile).
-2. Repositório: o mesmo `bot-wpp`.
-3. **Dockerfile path:** `docker/Dockerfile.api`.
-4. **Build context:** `.` (raiz do repositório) — **não** use a pasta `docker/` como context.
-5. Nome: `api`.
-6. Porta: `3000`.
-7. Domínio: `api.SEUDOMINIO.com` → porta `3000` + HTTPS.
-8. Healthcheck (se o painel pedir): HTTP `GET /api/health` na porta `3000`.
-9. Cole as variáveis da seção **4.1**.
-10. Deploy.
-
-A imagem já executa no start:
+A imagem da API já executa no start:
 
 ```text
 prisma migrate deploy  →  node dist/main.js
@@ -101,34 +104,18 @@ prisma migrate deploy  →  node dist/main.js
 
 O processo escuta em `0.0.0.0:3000` (compatível com proxy do EasyPanel).
 
-### 3.5 Serviço `worker`
+### 3.4 Build Arguments do `web`
 
-1. **+ Service** → **App** (Dockerfile).
-2. **Dockerfile path:** `docker/Dockerfile.worker`.
-3. **Build context:** raiz (`.`).
-4. Nome: `worker`.
-5. **Sem domínio público.**
-6. Cole as variáveis da seção **4.2**.
-7. Deploy.
-
-### 3.6 Serviço `web`
-
-1. **+ Service** → **App** (Dockerfile).
-2. **Dockerfile path:** `docker/Dockerfile.web`.
-3. **Build context:** raiz (`.`).
-4. Nome: `web`.
-5. Porta: `80`.
-6. Domínio: `app.SEUDOMINIO.com` → porta `80` + HTTPS.
-7. **Build Arguments** (obrigatório — Vite embute no bundle):
+No serviço `web` (Build Arguments — Vite embute no bundle):
 
 | Build Arg | Valor |
 |-----------|-------|
 | `VITE_API_URL` | `https://api.SEUDOMINIO.com/api` |
 | `VITE_WS_URL` | `https://api.SEUDOMINIO.com` |
 
-8. Deploy. Se mudar o domínio da API depois, **rebuild** o `web`.
+Se mudar o domínio da API depois, **rebuild** o `web`. Runtime env sozinho **não** atualiza o frontend Vite.
 
-### 3.7 Seed inicial (uma vez)
+### 3.5 Seed inicial (uma vez)
 
 Se o banco Supabase ainda estiver vazio (sem usuário admin), rode um **one-off** no serviço `api` ou localmente apontando para o Supabase:
 
@@ -140,7 +127,7 @@ Login padrão do seed: `admin@absresolve.com` / `admin123` — **troque a senha 
 
 As migrations já rodam automaticamente no start da `api`.
 
-### 3.8 Webhooks públicos
+### 3.6 Webhooks públicos
 
 Defina primeiro:
 
@@ -156,11 +143,15 @@ PUBLIC_API_URL=https://api.SEUDOMINIO.com
 - **Evolution:** a API configura o webhook ao criar instância WhatsApp (usa `EVOLUTION_WEBHOOK_URL` ou deriva de `PUBLIC_API_URL`).
 - **ASAAS:** no painel ASAAS → Integrações → Webhook → cole a URL acima (eventos de pagamento).
 
+### 3.7 Alternativa: um serviço por vez (sem compose)
+
+Se preferir criar serviço a serviço no EasyPanel (sem o arquivo compose), use as mesmas imagens/Dockerfiles e envs deste guia. O compose EasyPanel é o caminho mais simples para evitar conflitos de `ports`/`container_name`.
+
 ---
 
 ## 4. Variáveis de ambiente por serviço
 
-Substitua `SEUDOMINIO.com`, senhas e chaves. **Nunca** commite `.env` com secrets.
+Substitua `SEUDOMINIO.com`, senhas e chaves. **Nunca** commite `.env` com secrets. No EasyPanel, defina as envs no painel (ou env do projeto); o compose referencia `${DATABASE_URL}`, `${JWT_SECRET}`, etc.
 
 ### 4.1 `api`
 
@@ -221,7 +212,7 @@ VITE_API_URL=https://api.SEUDOMINIO.com/api
 VITE_WS_URL=https://api.SEUDOMINIO.com
 ```
 
-No EasyPanel: campo **Build Arguments** / **Build Args**. Runtime env sozinho **não** atualiza o frontend Vite.
+No EasyPanel: campo **Build Arguments** / **Build Args**.
 
 ### 4.4 `evolution-api`
 
@@ -239,7 +230,7 @@ LOG_LEVEL=ERROR,WARN,INFO
 # Com Supabase: crie um database/schema dedicado OU use outro projeto.
 # Sem DB próprio:
 DATABASE_ENABLED=false
-# Com Postgres próprio (se criar postgres no EasyPanel):
+# Com Postgres próprio (profile with-postgres):
 # DATABASE_ENABLED=true
 # DATABASE_PROVIDER=postgresql
 # DATABASE_CONNECTION_URI=postgresql://postgres:SENHA@postgres:5432/evolution?schema=public
@@ -251,7 +242,9 @@ DATABASE_ENABLED=false
 
 Sem variáveis obrigatórias.
 
-### 4.6 `postgres` (opcional — só se NÃO usar Supabase)
+### 4.6 `postgres` (opcional — profile `with-postgres`)
+
+Só se **não** usar Supabase. No EasyPanel, ative o profile `with-postgres` se o painel permitir; ou ignore este serviço.
 
 ```env
 POSTGRES_USER=postgres
@@ -304,7 +297,8 @@ DIRECT_URL=postgresql://postgres:SENHA@db.xxxx.supabase.co:5432/postgres?sslmode
 
 ## 7. Checklist pré-go-live (marque na UI)
 
-- [ ] Projeto EasyPanel criado; GitHub conectado
+- [ ] Projeto EasyPanel; GitHub conectado; compose = `docker/docker-compose.easypanel.yml`
+- [ ] Sem avisos de `container_name` / `ports` após salvar
 - [ ] `redis` saudável; `REDIS_HOST=redis` / `REDIS_PORT=6379`
 - [ ] Supabase: `DATABASE_URL` + `DIRECT_URL` com `sslmode=require`
 - [ ] `JWT_SECRET` forte; `EVOLUTION_API_KEY` igual na `api`, `worker` e `evolution-api`
@@ -318,7 +312,7 @@ DIRECT_URL=postgresql://postgres:SENHA@db.xxxx.supabase.co:5432/postgres?sslmode
 - [ ] Domínios HTTPS: `app.`, `api.`, `evo.`
 - [ ] ASAAS webhook → `https://api.SEUDOMINIO.com/api/payments/webhook/asaas`
 - [ ] Seed/admin com senha trocada
-- [ ] Dockerfile context = raiz do repo (não `docker/`)
+- [ ] Dockerfile context = raiz do repo (já no compose)
 
 ---
 
@@ -338,6 +332,8 @@ DIRECT_URL=postgresql://postgres:SENHA@db.xxxx.supabase.co:5432/postgres?sslmode
 
 | Variável | Local (dev) | EasyPanel |
 |----------|-------------|-----------|
+| Compose | `docker/docker-compose.yml` | `docker/docker-compose.easypanel.yml` |
+| `ports` / `container_name` | sim (host bind) | **não** (EasyPanel gerencia) |
 | `DATABASE_URL` | `127.0.0.1:5433` | Supabase pooler |
 | `REDIS_HOST` | `127.0.0.1` (porta host `6380`) | `redis` / `6379` |
 | `EVOLUTION_API_URL` | `http://localhost:8080` | `http://evolution-api:8080` |
@@ -352,6 +348,7 @@ DIRECT_URL=postgresql://postgres:SENHA@db.xxxx.supabase.co:5432/postgres?sslmode
 
 | Sintoma | Causa comum | Ação |
 |---------|-------------|------|
+| Aviso `ports` / `container_name` | Compose local no EasyPanel | Trocar para `docker/docker-compose.easypanel.yml` e salvar/redeploy |
 | API reinicia em loop | `DATABASE_URL`/`DIRECT_URL` inválidos | Conferir SSL, senha, pooler vs direct |
 | Healthcheck falha | porta/path errados | Usar `/api/health` na porta `3000` |
 | Frontend sem dados | Build args errados | Rebuild `web` com `VITE_*` públicos |
@@ -365,10 +362,11 @@ DIRECT_URL=postgresql://postgres:SENHA@db.xxxx.supabase.co:5432/postgres?sslmode
 
 | Arquivo | Uso |
 |---------|-----|
+| `docker/docker-compose.easypanel.yml` | **Produção EasyPanel** (sem ports/container_name) |
+| `docker/docker-compose.yml` | **Somente local** (com ports no host) |
 | `docker/Dockerfile.api` | Build + migrate no start + `node` |
 | `docker/api-entrypoint.sh` | `prisma migrate deploy` → start |
 | `docker/Dockerfile.worker` | Worker BullMQ |
 | `docker/Dockerfile.web` | Nginx + SPA Vite |
 | `docker/nginx.conf` | `/healthz` + SPA fallback |
-| `docker/docker-compose.yml` | **Somente local** |
 | `.env.example` | Modelo de variáveis (sem secrets) |
