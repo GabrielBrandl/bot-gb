@@ -47,8 +47,13 @@ export class WhatsappService {
       return configured.trim();
     }
     const apiPrefix = this.config.get<string>("API_PREFIX", "api");
+    // Produção (EasyPanel): PUBLIC_API_URL=https://api.seudominio.com
+    const publicApi = this.config.get<string>("PUBLIC_API_URL")?.trim().replace(/\/$/, "");
+    if (publicApi) {
+      return `${publicApi}/${apiPrefix}/whatsapp/webhook`;
+    }
     const port = this.config.get<number>("API_PORT", 3000);
-    // Evolution runs in Docker; host.docker.internal reaches the API on the host (Windows/Mac).
+    // Local: Evolution no Docker → API no host (Windows/Mac).
     return `http://host.docker.internal:${port}/${apiPrefix}/whatsapp/webhook`;
   }
 

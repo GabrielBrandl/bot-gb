@@ -1,0 +1,2 @@
+# Shell scripts must use LF so Alpine ENTRYPOINT works on Linux hosts (EasyPanel)
+docker/*.sh text eol=lf

@@ -1,6 +1,16 @@
 services:
-  # Local stack. On EasyPanel: create ONE service per entry below (api, worker, web,
-  # redis, evolution-api; DB = Supabase OR postgres). See docs/DEPLOY_EASYPANEL.md.
+  # Local stack only. EasyPanel: ONE service per entry (api, worker, web, redis,
+  # evolution-api). DB = Supabase (recommended) OR optional postgres.
+  # Full guide: docs/DEPLOY_EASYPANEL.md
+  #
+  # EasyPanel env cheat-sheet (production placeholders):
+  #   api/worker: DATABASE_URL + DIRECT_URL (Supabase), REDIS_HOST=redis,
+  #     PUBLIC_API_URL=https://api.SEUDOMINIO.com,
+  #     EVOLUTION_WEBHOOK_URL=${PUBLIC_API_URL}/api/whatsapp/webhook,
+  #     EVOLUTION_API_URL=http://evolution-api:8080, CORS_ORIGIN=https://app.SEUDOMINIO.com
+  #   web build args: VITE_API_URL=https://api.SEUDOMINIO.com/api
+  #                   VITE_WS_URL=https://api.SEUDOMINIO.com
+  #   evolution-api: SERVER_URL=https://evo.SEUDOMINIO.com, CACHE_REDIS_URI=redis://redis:6379
   postgres:
     image: pgvector/pgvector:pg16
     container_name: bot-wpp-postgres
@@ -46,10 +56,14 @@ services:
       - ../.env
     environment:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/bot_wpp?schema=public
+      DIRECT_URL: postgresql://postgres:postgres@postgres:5432/bot_wpp?schema=public
       REDIS_HOST: redis
       REDIS_PORT: 6379
       API_PORT: 3000
       CORS_ORIGIN: http://localhost:5173
+      # Local compose: Evolution reaches API by service name.
+      # EasyPanel: PUBLIC_API_URL=https://api.SEUDOMINIO.com
+      #            EVOLUTION_WEBHOOK_URL=${PUBLIC_API_URL}/api/whatsapp/webhook
       EVOLUTION_API_URL: http://evolution-api:8080
       EVOLUTION_WEBHOOK_URL: http://api:3000/api/whatsapp/webhook
     ports:
@@ -72,6 +86,7 @@ services:
       - ../.env
     environment:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/bot_wpp?schema=public
+      DIRECT_URL: postgresql://postgres:postgres@postgres:5432/bot_wpp?schema=public
       REDIS_HOST: redis
       REDIS_PORT: 6379
       EVOLUTION_API_URL: http://evolution-api:8080
@@ -86,6 +101,7 @@ services:
       context: ..
       dockerfile: docker/Dockerfile.web
       args:
+        # EasyPanel: https://api.SEUDOMINIO.com/api  and  https://api.SEUDOMINIO.com
         VITE_API_URL: ${VITE_API_URL:-http://localhost:3000/api}
         VITE_WS_URL: ${VITE_WS_URL:-http://localhost:3000}
     container_name: bot-wpp-web

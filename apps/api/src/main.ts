@@ -27,8 +27,9 @@ async function bootstrap() {
   );
 
   const port = config.get<number>("API_PORT", 3000);
-  await app.listen(port);
-  console.log(`API running on http://localhost:${port}/${prefix}`);
+  // Bind 0.0.0.0 so EasyPanel / Docker healthchecks and reverse proxies can reach the process
+  await app.listen(port, "0.0.0.0");
+  console.log(`API running on http://0.0.0.0:${port}/${prefix}`);
 }
 
 void bootstrap();
