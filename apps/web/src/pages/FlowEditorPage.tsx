@@ -97,19 +97,19 @@ function normalizeNodes(raw: unknown): Node<FlowNodeData>[] {
 
 function normalizeEdges(raw: unknown): Edge[] {
   if (!Array.isArray(raw)) return [];
-  return raw
-    .map((item, index) => {
-      const e = (item ?? {}) as Partial<Edge>;
-      if (!e.source || !e.target) return null;
-      return {
-        id: typeof e.id === "string" && e.id ? e.id : `edge-${e.source}-${e.target}-${index}`,
-        source: String(e.source),
-        target: String(e.target),
-        sourceHandle: e.sourceHandle ?? undefined,
-        targetHandle: e.targetHandle ?? undefined,
-      } satisfies Edge;
-    })
-    .filter((e): e is Edge => e !== null);
+  const edges: Edge[] = [];
+  raw.forEach((item, index) => {
+    const e = (item ?? {}) as Partial<Edge>;
+    if (!e.source || !e.target) return;
+    edges.push({
+      id: typeof e.id === "string" && e.id ? e.id : `edge-${e.source}-${e.target}-${index}`,
+      source: String(e.source),
+      target: String(e.target),
+      ...(e.sourceHandle != null ? { sourceHandle: String(e.sourceHandle) } : {}),
+      ...(e.targetHandle != null ? { targetHandle: String(e.targetHandle) } : {}),
+    });
+  });
+  return edges;
 }
 
 class FlowEditorErrorBoundary extends Component<
