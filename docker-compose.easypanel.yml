@@ -1,14 +1,10 @@
 # EasyPanel production stack (NO host ports, NO container_name).
-# Prefer ROOT compose so EasyPanel createDotEnv lands next to the file:
+# Prefer this ROOT path in EasyPanel so createDotEnv writes .env next to compose:
 #   docker-compose.easypanel.yml
-# This path still works if you also place/copy .env into docker/:
-#   docker/docker-compose.easypanel.yml
+# (Also available: docker/docker-compose.easypanel.yml — but .env may not load there.)
 #
 # Domains/ports are assigned by EasyPanel. Services talk by service name.
-# DB: Supabase (set DATABASE_URL + DIRECT_URL in EasyPanel env).
-# Optional local Postgres: docker compose --profile with-postgres ...
-#
-# Full guide: docs/DEPLOY_EASYPANEL.md
+# DB: Supabase (set DATABASE_URL + DIRECT_URL in EasyPanel env + createDotEnv).
 
 services:
   redis:
@@ -50,7 +46,7 @@ services:
 
   api:
     build:
-      context: ..
+      context: .
       dockerfile: docker/Dockerfile.api
     restart: unless-stopped
     environment:
@@ -78,7 +74,7 @@ services:
 
   worker:
     build:
-      context: ..
+      context: .
       dockerfile: docker/Dockerfile.worker
     restart: unless-stopped
     environment:
@@ -94,7 +90,7 @@ services:
 
   web:
     build:
-      context: ..
+      context: .
       dockerfile: docker/Dockerfile.web
       args:
         VITE_API_URL: ${VITE_API_URL:-https://api.SEUDOMINIO.com/api}
@@ -105,8 +101,6 @@ services:
     expose:
       - "80"
 
-  # Optional — only if NOT using Supabase:
-  # Enable with profile "with-postgres" in EasyPanel / compose CLI.
   postgres:
     profiles: ["with-postgres"]
     image: pgvector/pgvector:pg16
@@ -117,7 +111,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-bot_wpp}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./init-evolution-db.sql:/docker-entrypoint-initdb.d/01-evolution.sql:ro
+      - ./docker/init-evolution-db.sql:/docker-entrypoint-initdb.d/01-evolution.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d bot_wpp"]
       interval: 5s
