@@ -23,6 +23,11 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @Get("me")
   me(@CurrentUser() user: AuthUser) {
-    return this.authService.me(user.id, user.tenantId);
+    return this.authService.me(
+      user.id,
+      user.tenantId,
+      Boolean(user.impersonating),
+      user.homeTenantId,
+    );
   }
 }

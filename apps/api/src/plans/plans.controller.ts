@@ -1,23 +1,166 @@
 import { Body, Controller, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
-import { IsIn, IsString } from "class-validator";
+import {
+  IsBoolean,
+  IsEmail,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  Min,
+  MinLength,
+} from "class-validator";
+import { Type } from "class-transformer";
 import type { AuthUser } from "@bot-wpp/shared-types";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { Public } from "../common/decorators/public.decorator";
 import { Roles } from "../common/decorators/roles.decorator";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../common/guards/roles.guard";
-import { PlansService, PlatformAdminService } from "./plans.service";
+import { PlansService } from "./plans.service";
+import { PlatformAdminService } from "./platform-admin.service";
 
 class ChangePlanDto {
   @IsString()
   @IsIn(["STARTER", "PRO", "ENTERPRISE"])
-  planId!: string;
+  planId!: "STARTER" | "PRO" | "ENTERPRISE";
 }
 
 class BillingStatusDto {
   @IsString()
   @IsIn(["trialing", "active", "past_due", "canceled", "suspended"])
-  billingStatus!: string;
+  billingStatus!: "trialing" | "active" | "past_due" | "canceled" | "suspended";
+}
+
+class CreateTenantDto {
+  @IsString()
+  @MinLength(2)
+  companyName!: string;
+
+  @IsString()
+  @MinLength(2)
+  adminName!: string;
+
+  @IsEmail()
+  adminEmail!: string;
+
+  @IsString()
+  @MinLength(6)
+  adminPassword!: string;
+
+  @IsString()
+  @IsIn(["STARTER", "PRO", "ENTERPRISE"])
+  planId!: "STARTER" | "PRO" | "ENTERPRISE";
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  maxAgents?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  maxWhatsapp?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  maxInstagram?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  maxContacts?: number;
+
+  @IsOptional()
+  @IsIn(["trialing", "active", "past_due", "canceled", "suspended"])
+  billingStatus?: "trialing" | "active" | "past_due" | "canceled" | "suspended";
+}
+
+class UpdateTenantDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
+  name?: string;
+
+  @IsOptional()
+  @IsIn(["STARTER", "PRO", "ENTERPRISE"])
+  planId?: "STARTER" | "PRO" | "ENTERPRISE";
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  maxAgents?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  maxWhatsapp?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  maxInstagram?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  maxContacts?: number;
+
+  @IsOptional()
+  @IsIn(["trialing", "active", "past_due", "canceled", "suspended"])
+  billingStatus?: "trialing" | "active" | "past_due" | "canceled" | "suspended";
+
+  @IsOptional()
+  @IsString()
+  primaryColor?: string;
+
+  @IsOptional()
+  @IsString()
+  logoUrl?: string;
+}
+
+class CreateUserDto {
+  @IsString()
+  @MinLength(2)
+  name!: string;
+
+  @IsEmail()
+  email!: string;
+
+  @IsString()
+  @MinLength(6)
+  password!: string;
+
+  @IsIn(["ADMIN", "SUPERVISOR", "AGENT"])
+  role!: "ADMIN" | "SUPERVISOR" | "AGENT";
+}
+
+class UpdateUserDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
+  name?: string;
+
+  @IsOptional()
+  @IsIn(["ADMIN", "SUPERVISOR", "AGENT"])
+  role?: "ADMIN" | "SUPERVISOR" | "AGENT";
+
+  @IsOptional()
+  @IsBoolean()
+  active?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(6)
+  password?: string;
 }
 
 @Controller()
@@ -32,6 +175,12 @@ export class PlansController {
   async listPlans() {
     const plans = await this.plans.listPublic();
     return plans.map((p) => this.plans.serialize(p));
+  }
+
+  @Public()
+  @Get("tenants/by-slug/:slug")
+  tenantBySlug(@Param("slug") slug: string) {
+    return this.platform.getPublicBySlug(slug);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -62,6 +211,34 @@ export class PlansController {
 
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles("PLATFORM_OWNER")
+  @Get("platform/tenants/:id")
+  async tenantDetail(@CurrentUser() user: AuthUser, @Param("id") id: string) {
+    await this.platform.assertOwner(user.id);
+    return this.platform.getTenant(id);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("PLATFORM_OWNER")
+  @Post("platform/tenants")
+  async createTenant(@CurrentUser() user: AuthUser, @Body() dto: CreateTenantDto) {
+    await this.platform.assertOwner(user.id);
+    return this.platform.createTenant(dto);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("PLATFORM_OWNER")
+  @Patch("platform/tenants/:id")
+  async updateTenant(
+    @CurrentUser() user: AuthUser,
+    @Param("id") id: string,
+    @Body() dto: UpdateTenantDto,
+  ) {
+    await this.platform.assertOwner(user.id);
+    return this.platform.updateTenant(id, dto);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("PLATFORM_OWNER")
   @Patch("platform/tenants/:id/plan")
   async changeTenantPlan(
     @CurrentUser() user: AuthUser,
@@ -82,5 +259,46 @@ export class PlansController {
   ) {
     await this.platform.assertOwner(user.id);
     return this.platform.setTenantStatus(id, dto.billingStatus);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("PLATFORM_OWNER")
+  @Post("platform/tenants/:id/users")
+  async createUser(
+    @CurrentUser() user: AuthUser,
+    @Param("id") id: string,
+    @Body() dto: CreateUserDto,
+  ) {
+    await this.platform.assertOwner(user.id);
+    return this.platform.createUser(id, dto);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("PLATFORM_OWNER")
+  @Patch("platform/tenants/:tenantId/users/:userId")
+  async updateUser(
+    @CurrentUser() user: AuthUser,
+    @Param("tenantId") tenantId: string,
+    @Param("userId") userId: string,
+    @Body() dto: UpdateUserDto,
+  ) {
+    await this.platform.assertOwner(user.id);
+    return this.platform.updateUser(tenantId, userId, dto);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("PLATFORM_OWNER")
+  @Post("platform/tenants/:id/impersonate")
+  async impersonate(@CurrentUser() user: AuthUser, @Param("id") id: string) {
+    await this.platform.assertOwner(user.id);
+    return this.platform.impersonate(user.id, id);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("PLATFORM_OWNER")
+  @Post("platform/stop-impersonation")
+  async stopImpersonation(@CurrentUser() user: AuthUser) {
+    await this.platform.assertOwner(user.id);
+    return this.platform.stopImpersonation(user.id);
   }
 }

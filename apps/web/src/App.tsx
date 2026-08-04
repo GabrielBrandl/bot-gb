@@ -1,6 +1,7 @@
-import { lazy, Suspense } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { lazy, Suspense, useEffect, useState } from "react";
+import { Navigate, Route, Routes, useParams } from "react-router-dom";
 import { useAuth } from "./lib/auth";
+import { tenantBySlug } from "./lib/api";
 import { AppLayout } from "./components/layout/AppLayout";
 import { DashboardPage } from "./pages/DashboardPage";
 import { LoginPage } from "./pages/LoginPage";
@@ -16,7 +17,7 @@ import { CampaignsPage } from "./pages/CampaignsPage";
 import { PaymentsPage } from "./pages/PaymentsPage";
 import { ReportsPage } from "./pages/ReportsPage";
 import { SettingsPage } from "./pages/SettingsPage";
-import { LoadingState } from "./components/ui/PageHeader";
+import { ErrorState, LoadingState } from "./components/ui/PageHeader";
 
 const FlowEditorPage = lazy(async () => {
   const mod = await import("./pages/FlowEditorPage");
@@ -25,21 +26,65 @@ const FlowEditorPage = lazy(async () => {
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
-
   if (loading) {
-    return (
-      <div className="grid min-h-screen place-items-center text-[var(--gb-muted)]">
-        Carregando...
-      </div>
-    );
+    return <div className="grid min-h-screen place-items-center text-[var(--gb-muted)]">Carregando...</div>;
   }
-
-  if (!user) {
-    return <Navigate to="/login" replace />;
-  }
-
+  if (!user) return <Navigate to="/login" replace />;
   return children;
 }
+
+function TenantGate({ children }: { children: React.ReactNode }) {
+  const { slug } = useParams();
+  const { user, loading } = useAuth();
+  const [checking, setChecking] = useState(true);
+  const [valid, setValid] = useState(false);
+  const [suspended, setSuspended] = useState(false);
+
+  useEffect(() => {
+    if (!slug) return;
+    tenantBySlug(slug)
+      .then((res) => {
+        setValid(res.found);
+        setSuspended(Boolean(res.tenant?.suspended));
+      })
+      .catch(() => setValid(false))
+      .finally(() => setChecking(false));
+  }, [slug]);
+
+  if (loading || checking) return <LoadingState message="Carregando portal..." />;
+  if (!valid) return <ErrorState message="Empresa não encontrada." />;
+  if (suspended && user?.role !== "PLATFORM_OWNER") {
+    return <ErrorState message="Empresa suspensa. Contate o suporte GB Systems." />;
+  }
+  if (!user) return <Navigate to={`/t/${slug}/login`} replace />;
+  if (user.tenantSlug && user.tenantSlug !== slug && !(user.role === "PLATFORM_OWNER" && user.impersonating)) {
+    return <Navigate to={`/t/${user.tenantSlug}`} replace />;
+  }
+  return children;
+}
+
+const portalRoutes = (
+  <>
+    <Route index element={<DashboardPage />} />
+    <Route path="inbox" element={<InboxPage />} />
+    <Route path="kanban" element={<KanbanPage />} />
+    <Route path="contatos" element={<ContactsPage />} />
+    <Route path="automacoes" element={<FlowsPage />} />
+    <Route
+      path="automacoes/:id"
+      element={
+        <Suspense fallback={<LoadingState message="Carregando editor..." />}>
+          <FlowEditorPage />
+        </Suspense>
+      }
+    />
+    <Route path="agente-ia" element={<AiAgentsPage />} />
+    <Route path="campanhas" element={<CampaignsPage />} />
+    <Route path="pagamentos" element={<PaymentsPage />} />
+    <Route path="relatorios" element={<ReportsPage />} />
+    <Route path="configuracoes" element={<SettingsPage />} />
+  </>
+);
 
 export function App() {
   return (
@@ -47,6 +92,19 @@ export function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/planos" element={<PricingPage />} />
+      <Route path="/t/:slug/login" element={<LoginPage />} />
+
+      <Route
+        path="/admin"
+        element={
+          <ProtectedRoute>
+            <AppLayout />
+          </ProtectedRoute>
+        }
+      >
+        <Route index element={<PlatformAdminPage />} />
+      </Route>
+
       <Route
         element={
           <ProtectedRoute>
@@ -54,26 +112,20 @@ export function App() {
           </ProtectedRoute>
         }
       >
-        <Route index element={<DashboardPage />} />
-        <Route path="admin" element={<PlatformAdminPage />} />
-        <Route path="inbox" element={<InboxPage />} />
-        <Route path="kanban" element={<KanbanPage />} />
-        <Route path="contatos" element={<ContactsPage />} />
-        <Route path="automacoes" element={<FlowsPage />} />
-        <Route
-          path="automacoes/:id"
-          element={
-            <Suspense fallback={<LoadingState message="Carregando editor..." />}>
-              <FlowEditorPage />
-            </Suspense>
-          }
-        />
-        <Route path="agente-ia" element={<AiAgentsPage />} />
-        <Route path="campanhas" element={<CampaignsPage />} />
-        <Route path="pagamentos" element={<PaymentsPage />} />
-        <Route path="relatorios" element={<ReportsPage />} />
-        <Route path="configuracoes" element={<SettingsPage />} />
+        {portalRoutes}
       </Route>
+
+      <Route
+        path="/t/:slug"
+        element={
+          <TenantGate>
+            <AppLayout />
+          </TenantGate>
+        }
+      >
+        {portalRoutes}
+      </Route>
+
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

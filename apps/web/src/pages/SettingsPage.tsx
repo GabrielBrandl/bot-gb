@@ -410,25 +410,57 @@ export function SettingsPage() {
 
       {tab === "equipe" && (
         <Card>
-          <h2 className="mb-4 text-lg font-medium text-[var(--abs-blue-dark)]">Usuários da equipe</h2>
+          <h2 className="mb-4 text-lg font-medium text-white">Usuários da equipe</h2>
+          <form
+            className="mb-6 grid gap-2 sm:grid-cols-2"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              if (!token) return;
+              const fd = new FormData(e.currentTarget);
+              try {
+                await usersApi.create(token, {
+                  name: String(fd.get("name") || ""),
+                  email: String(fd.get("email") || ""),
+                  password: String(fd.get("password") || ""),
+                  role: String(fd.get("role") || "AGENT") as "ADMIN" | "SUPERVISOR" | "AGENT",
+                });
+                e.currentTarget.reset();
+                await load();
+              } catch (err) {
+                setError(err instanceof Error ? err.message : "Erro ao criar usuário");
+              }
+            }}
+          >
+            <input className={inputClass} name="name" placeholder="Nome" required />
+            <input className={inputClass} name="email" type="email" placeholder="E-mail" required />
+            <input className={inputClass} name="password" placeholder="Senha" required minLength={6} />
+            <select className={inputClass} name="role" defaultValue="AGENT">
+              <option value="AGENT">Atendente</option>
+              <option value="SUPERVISOR">Supervisor</option>
+              <option value="ADMIN">Admin empresa</option>
+            </select>
+            <button type="submit" className={`${btnPrimary} sm:col-span-2`}>Adicionar usuário</button>
+          </form>
           {users.length === 0 ? (
-            <p className="text-sm text-[var(--abs-muted)]">Nenhum usuário encontrado.</p>
+            <p className="text-sm text-[var(--gb-muted)]">Nenhum usuário encontrado.</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-[var(--abs-gray)] text-left text-[var(--abs-muted)]">
+                  <tr className="border-b border-[var(--gb-border)] text-left text-[var(--gb-muted)]">
                     <th className="pb-3 font-medium">Nome</th>
                     <th className="pb-3 font-medium">E-mail</th>
                     <th className="pb-3 font-medium">Papel</th>
+                    <th className="pb-3 font-medium">Status</th>
                   </tr>
                 </thead>
                 <tbody>
                   {users.map((u) => (
-                    <tr key={u.id} className="border-b border-[var(--abs-gray)]/50">
-                      <td className="py-3 text-[var(--abs-blue-dark)]">{u.name}</td>
-                      <td className="py-3 text-slate-600">{u.email}</td>
-                      <td className="py-3 text-[var(--abs-muted)]">{u.role}</td>
+                    <tr key={u.id} className="border-b border-[var(--gb-border)]">
+                      <td className="py-3 text-white">{u.name}</td>
+                      <td className="py-3 text-[var(--gb-muted)]">{u.email}</td>
+                      <td className="py-3 text-[var(--gb-muted)]">{u.role}</td>
+                      <td className="py-3 text-[var(--gb-muted)]">{u.active === false ? "Inativo" : "Ativo"}</td>
                     </tr>
                   ))}
                 </tbody>

@@ -8,11 +8,16 @@ export interface AuthUser {
   email: string;
   name: string;
   role: UserRole;
+  tenantSlug?: string;
+  tenantName?: string;
+  impersonating?: boolean;
+  homeTenantId?: string;
 }
 
 export interface LoginRequest {
   email: string;
   password: string;
+  tenantSlug?: string;
 }
 
 export interface RegisterRequest {
@@ -41,6 +46,7 @@ export type CampaignRecipientStatus = "pending" | "sent" | "failed";
 export type PaymentStatus = "pending" | "paid" | "cancelled" | "expired";
 export type WhatsappInstanceStatus = "disconnected" | "connecting" | "connected";
 export type InstagramAccountStatus = "disconnected" | "connecting" | "connected";
+export type BillingStatus = "trialing" | "active" | "past_due" | "canceled" | "suspended";
 
 export interface PlanPublic {
   id: string;
@@ -65,6 +71,19 @@ export interface PlanPublic {
   features: string[];
   highlight: boolean;
   sortOrder: number;
+}
+
+export interface CreateTenantRequest {
+  companyName: string;
+  adminName: string;
+  adminEmail: string;
+  adminPassword: string;
+  planId: PlanCode;
+  maxAgents?: number;
+  maxWhatsapp?: number;
+  maxInstagram?: number;
+  maxContacts?: number;
+  billingStatus?: BillingStatus;
 }
 
 export interface FlowNode {

@@ -158,6 +158,7 @@ export interface TeamUser {
   name: string;
   email: string;
   role: UserRole;
+  active?: boolean;
   createdAt?: string;
 }
 

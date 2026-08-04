@@ -100,12 +100,14 @@ export class AuthService {
       return user;
     });
 
-    return this.buildAuthResponse(result);
+    const tenant = await this.prisma.tenant.findUnique({ where: { id: result.tenantId } });
+    return this.buildAuthResponse(result, tenant);
   }
 
   async login(dto: LoginDto): Promise<AuthResponse> {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email.toLowerCase() },
+      include: { tenant: true },
     });
 
     if (!user || !user.active) {
@@ -117,12 +119,42 @@ export class AuthService {
       throw new UnauthorizedException("Credenciais inválidas");
     }
 
-    return this.buildAuthResponse(user);
+    if (dto.tenantSlug && user.tenant.slug !== dto.tenantSlug && user.role !== UserRole.PLATFORM_OWNER) {
+      throw new UnauthorizedException("Este login não pertence a esta empresa");
+    }
+
+    if (user.role !== UserRole.PLATFORM_OWNER && user.tenant.billingStatus === "suspended") {
+      throw new UnauthorizedException("Empresa suspensa. Contate o suporte GB Systems.");
+    }
+
+    return this.buildAuthResponse(user, user.tenant);
   }
 
-  async me(userId: string, tenantId: string): Promise<AuthUser> {
+  async me(userId: string, tenantId: string, impersonating = false, homeTenantId?: string): Promise<AuthUser> {
+    if (impersonating) {
+      const owner = await this.prisma.user.findFirst({
+        where: { id: userId, role: UserRole.PLATFORM_OWNER, active: true },
+      });
+      const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
+      if (!owner || !tenant) {
+        throw new UnauthorizedException("Usuário não encontrado");
+      }
+      return {
+        id: owner.id,
+        tenantId: tenant.id,
+        email: owner.email,
+        name: owner.name,
+        role: "PLATFORM_OWNER",
+        tenantSlug: tenant.slug,
+        tenantName: tenant.name,
+        impersonating: true,
+        homeTenantId: homeTenantId ?? owner.tenantId,
+      };
+    }
+
     const user = await this.prisma.user.findFirst({
       where: { id: userId, tenantId, active: true },
+      include: { tenant: true },
     });
 
     if (!user) {
@@ -135,16 +167,21 @@ export class AuthService {
       email: user.email,
       name: user.name,
       role: user.role,
+      tenantSlug: user.tenant.slug,
+      tenantName: user.tenant.name,
     };
   }
 
-  private buildAuthResponse(user: {
-    id: string;
-    tenantId: string;
-    email: string;
-    name: string;
-    role: AuthUser["role"];
-  }): AuthResponse {
+  private buildAuthResponse(
+    user: {
+      id: string;
+      tenantId: string;
+      email: string;
+      name: string;
+      role: AuthUser["role"];
+    },
+    tenant?: { slug: string; name: string } | null,
+  ): AuthResponse {
     return {
       accessToken: this.jwtService.sign({
         sub: user.id,
@@ -158,6 +195,8 @@ export class AuthService {
         email: user.email,
         name: user.name,
         role: user.role,
+        tenantSlug: tenant?.slug,
+        tenantName: tenant?.name,
       },
     };
   }

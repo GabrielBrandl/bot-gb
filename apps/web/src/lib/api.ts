@@ -250,7 +250,58 @@ export const tenantsApi = {
 // Users
 export const usersApi = {
   list: (token: string) => apiRequest<TeamUser[]>("/users", {}, token),
+  create: (
+    token: string,
+    data: { name: string; email: string; password: string; role: "ADMIN" | "SUPERVISOR" | "AGENT" },
+  ) => apiRequest<TeamUser>("/users", { method: "POST", body: JSON.stringify(data) }, token),
+  update: (
+    token: string,
+    id: string,
+    data: Partial<{ name: string; role: "ADMIN" | "SUPERVISOR" | "AGENT"; active: boolean; password: string }>,
+  ) => apiRequest<TeamUser>(`/users/${id}`, { method: "PATCH", body: JSON.stringify(data) }, token),
 };
+
+export const platformApi = {
+  overview: (token: string) => apiRequest("/platform/overview", {}, token),
+  listTenants: (token: string) => apiRequest("/platform/tenants", {}, token),
+  getTenant: (token: string, id: string) => apiRequest(`/platform/tenants/${id}`, {}, token),
+  createTenant: (token: string, data: Record<string, unknown>) =>
+    apiRequest("/platform/tenants", { method: "POST", body: JSON.stringify(data) }, token),
+  updateTenant: (token: string, id: string, data: Record<string, unknown>) =>
+    apiRequest(`/platform/tenants/${id}`, { method: "PATCH", body: JSON.stringify(data) }, token),
+  createUser: (token: string, tenantId: string, data: Record<string, unknown>) =>
+    apiRequest(`/platform/tenants/${tenantId}/users`, { method: "POST", body: JSON.stringify(data) }, token),
+  updateUser: (token: string, tenantId: string, userId: string, data: Record<string, unknown>) =>
+    apiRequest(`/platform/tenants/${tenantId}/users/${userId}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }, token),
+  impersonate: (token: string, tenantId: string) =>
+    apiRequest<import("@bot-wpp/shared-types").AuthResponse>(
+      `/platform/tenants/${tenantId}/impersonate`,
+      { method: "POST" },
+      token,
+    ),
+  stopImpersonation: (token: string) =>
+    apiRequest<import("@bot-wpp/shared-types").AuthResponse>(
+      "/platform/stop-impersonation",
+      { method: "POST" },
+      token,
+    ),
+};
+
+export function tenantBySlug(slug: string) {
+  return apiRequest<{
+    found: boolean;
+    tenant?: {
+      name: string;
+      slug: string;
+      logoUrl?: string | null;
+      primaryColor?: string | null;
+      suspended?: boolean;
+    };
+  }>(`/tenants/by-slug/${slug}`);
+}
 
 // Audit
 export const auditApi = {
