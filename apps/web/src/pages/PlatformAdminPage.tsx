@@ -219,7 +219,7 @@ export function PlatformAdminPage() {
     <div className="gb-animate-in space-y-6">
       <PageHeader
         title="Super Admin GB Systems"
-        description="Cadastre clientes, defina planos/limites, gerencie usuários e entre em qualquer empresa."
+        description="Painel exclusivo: cadastre clientes, planos, limites e entre no portal de cada empresa para ver o chat."
       />
 
       {error ? <ErrorState message={error} /> : null}

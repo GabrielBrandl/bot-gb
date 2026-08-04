@@ -23,17 +23,18 @@ import { platformApi } from "../../lib/api";
 import { cn } from "../../lib/utils";
 import { btnSecondary } from "../ui/PageHeader";
 
-const allNav = [
-  { to: "", label: "Início", icon: LayoutDashboard, end: true, roles: ["PLATFORM_OWNER", "ADMIN", "SUPERVISOR", "AGENT"] },
-  { to: "inbox", label: "Inbox", icon: Inbox, roles: ["PLATFORM_OWNER", "ADMIN", "SUPERVISOR", "AGENT"] },
-  { to: "kanban", label: "Kanban", icon: Kanban, roles: ["PLATFORM_OWNER", "ADMIN", "SUPERVISOR", "AGENT"] },
-  { to: "contatos", label: "Contatos", icon: Users, roles: ["PLATFORM_OWNER", "ADMIN", "SUPERVISOR", "AGENT"] },
-  { to: "automacoes", label: "Automações", icon: GitBranch, roles: ["PLATFORM_OWNER", "ADMIN", "SUPERVISOR"] },
-  { to: "agente-ia", label: "Agente IA", icon: Bot, roles: ["PLATFORM_OWNER", "ADMIN", "SUPERVISOR"] },
-  { to: "campanhas", label: "Campanhas", icon: Megaphone, roles: ["PLATFORM_OWNER", "ADMIN", "SUPERVISOR"] },
-  { to: "pagamentos", label: "Pagamentos", icon: CreditCard, roles: ["PLATFORM_OWNER", "ADMIN"] },
-  { to: "relatorios", label: "Relatórios", icon: BarChart3, roles: ["PLATFORM_OWNER", "ADMIN", "SUPERVISOR"] },
-  { to: "configuracoes", label: "Configurações", icon: Settings, roles: ["PLATFORM_OWNER", "ADMIN"] },
+/** Menus do portal do cliente (admin/supervisor/atendente). Super Admin só vê isso ao entrar em uma empresa. */
+const tenantNav = [
+  { to: "", label: "Início", icon: LayoutDashboard, end: true, roles: ["ADMIN", "SUPERVISOR", "AGENT"] },
+  { to: "inbox", label: "Inbox", icon: Inbox, roles: ["ADMIN", "SUPERVISOR", "AGENT"] },
+  { to: "kanban", label: "Kanban", icon: Kanban, roles: ["ADMIN", "SUPERVISOR", "AGENT"] },
+  { to: "contatos", label: "Contatos", icon: Users, roles: ["ADMIN", "SUPERVISOR", "AGENT"] },
+  { to: "automacoes", label: "Automações", icon: GitBranch, roles: ["ADMIN", "SUPERVISOR"] },
+  { to: "agente-ia", label: "Agente IA", icon: Bot, roles: ["ADMIN", "SUPERVISOR"] },
+  { to: "campanhas", label: "Campanhas", icon: Megaphone, roles: ["ADMIN", "SUPERVISOR"] },
+  { to: "pagamentos", label: "Pagamentos", icon: CreditCard, roles: ["ADMIN"] },
+  { to: "relatorios", label: "Relatórios", icon: BarChart3, roles: ["ADMIN", "SUPERVISOR"] },
+  { to: "configuracoes", label: "Configurações", icon: Settings, roles: ["ADMIN"] },
 ];
 
 export function AppLayout() {
@@ -42,9 +43,15 @@ export function AppLayout() {
   const { slug } = useParams();
   const [mobileOpen, setMobileOpen] = useState(false);
   const isOwner = user?.role === "PLATFORM_OWNER";
+  const isControlPanel = Boolean(isOwner && !user?.impersonating);
   const base = slug ? `/t/${slug}` : "";
 
-  const navItems = allNav.filter((item) => user && item.roles.includes(user.role));
+  const navItems = tenantNav.filter((item) => {
+    if (!user) return false;
+    if (isControlPanel) return false;
+    if (user.impersonating) return true;
+    return item.roles.includes(user.role);
+  });
 
   async function exitImpersonation() {
     if (!token) return;
@@ -81,7 +88,9 @@ export function AppLayout() {
             <div>
               <p className="gb-display text-sm font-bold tracking-wide text-white">GB Systems</p>
               <p className="truncate text-[11px] text-[var(--gb-muted)]">
-                {user?.tenantName ?? "Omnichannel Platform"}
+                {isControlPanel
+                  ? "Painel Super Admin"
+                  : user?.tenantName ?? "Portal da empresa"}
               </p>
             </div>
           </div>
@@ -92,10 +101,11 @@ export function AppLayout() {
 
         <nav className="flex-1 overflow-y-auto px-3 py-4">
           <ul className="space-y-1">
-            {isOwner && !user?.impersonating ? (
+            {isControlPanel ? (
               <li>
                 <NavLink
                   to="/admin"
+                  end
                   onClick={() => setMobileOpen(false)}
                   className={({ isActive }) =>
                     cn(
@@ -105,10 +115,11 @@ export function AppLayout() {
                   }
                 >
                   <Shield className="h-4 w-4 shrink-0" />
-                  Super Admin
+                  Controle de clientes
                 </NavLink>
               </li>
             ) : null}
+
             {navItems.map(({ to, label, icon: Icon, end }) => (
               <li key={to || "home"}>
                 <NavLink
@@ -134,7 +145,17 @@ export function AppLayout() {
           <div className="mb-3 truncate">
             <p className="truncate text-sm font-semibold text-white">{user?.name}</p>
             <p className="truncate text-xs text-[var(--gb-muted)]">
-              {user?.role === "AGENT" ? "Atendente" : user?.role === "ADMIN" ? "Admin empresa" : user?.role === "SUPERVISOR" ? "Supervisor" : "Super Admin"}
+              {isControlPanel
+                ? "Super Admin"
+                : user?.impersonating
+                  ? "Super Admin (na empresa)"
+                  : user?.role === "AGENT"
+                    ? "Atendente"
+                    : user?.role === "ADMIN"
+                      ? "Admin empresa"
+                      : user?.role === "SUPERVISOR"
+                        ? "Supervisor"
+                        : user?.role}
               {" · "}
               {user?.email}
             </p>
@@ -154,7 +175,7 @@ export function AppLayout() {
         {user?.impersonating ? (
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-500/30 bg-amber-500/15 px-4 py-2 text-sm text-amber-100">
             <p>
-              Modo Super Admin em <strong>{user.tenantName}</strong> (/t/{user.tenantSlug})
+              Você entrou no portal de <strong>{user.tenantName}</strong> — pode ver chat, configs e tudo do cliente.
             </p>
             <button type="button" className={btnSecondary} onClick={() => void exitImpersonation()}>
               <Undo2 className="mr-1 inline h-4 w-4" /> Voltar ao painel
@@ -166,7 +187,9 @@ export function AppLayout() {
           <button type="button" className="rounded-lg p-2 text-[var(--gb-cyan)] hover:bg-white/5" onClick={() => setMobileOpen(true)}>
             <Menu className="h-5 w-5" />
           </button>
-          <p className="text-sm font-bold text-white">GB Systems</p>
+          <p className="text-sm font-bold text-white">
+            {isControlPanel ? "Super Admin" : "GB Systems"}
+          </p>
         </div>
 
         <main className="flex-1 overflow-auto p-4 lg:p-6">

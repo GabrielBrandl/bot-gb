@@ -33,6 +33,32 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return children;
 }
 
+/** Super Admin sem impersonação só acessa /admin — sem chat próprio. */
+function BlockOwnerFromTenantPortal({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth();
+  if (loading) return null;
+  if (user?.role === "PLATFORM_OWNER" && !user.impersonating) {
+    return <Navigate to="/admin" replace />;
+  }
+  return children;
+}
+
+function RequireSuperAdmin({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth();
+  if (loading) {
+    return <div className="grid min-h-screen place-items-center text-[var(--gb-muted)]">Carregando...</div>;
+  }
+  if (!user) return <Navigate to="/login" replace />;
+  if (user.role !== "PLATFORM_OWNER") {
+    if (user.tenantSlug) return <Navigate to={`/t/${user.tenantSlug}`} replace />;
+    return <Navigate to="/login" replace />;
+  }
+  if (user.impersonating && user.tenantSlug) {
+    return <Navigate to={`/t/${user.tenantSlug}/inbox`} replace />;
+  }
+  return children;
+}
+
 function TenantGate({ children }: { children: React.ReactNode }) {
   const { slug } = useParams();
   const { user, loading } = useAuth();
@@ -97,9 +123,9 @@ export function App() {
       <Route
         path="/admin"
         element={
-          <ProtectedRoute>
+          <RequireSuperAdmin>
             <AppLayout />
-          </ProtectedRoute>
+          </RequireSuperAdmin>
         }
       >
         <Route index element={<PlatformAdminPage />} />
@@ -108,7 +134,9 @@ export function App() {
       <Route
         element={
           <ProtectedRoute>
-            <AppLayout />
+            <BlockOwnerFromTenantPortal>
+              <AppLayout />
+            </BlockOwnerFromTenantPortal>
           </ProtectedRoute>
         }
       >
@@ -119,14 +147,16 @@ export function App() {
         path="/t/:slug"
         element={
           <TenantGate>
-            <AppLayout />
+            <BlockOwnerFromTenantPortal>
+              <AppLayout />
+            </BlockOwnerFromTenantPortal>
           </TenantGate>
         }
       >
         {portalRoutes}
       </Route>
 
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   );
 }

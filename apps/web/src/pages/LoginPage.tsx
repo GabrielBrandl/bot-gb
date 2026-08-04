@@ -32,12 +32,15 @@ export function LoginPage() {
   }, [slug]);
 
   if (!loading && user) {
-    if (user.role === "PLATFORM_OWNER" && !user.impersonating && !slug) {
+    if (user.role === "PLATFORM_OWNER" && !user.impersonating) {
       return <Navigate to="/admin" replace />;
+    }
+    if (user.impersonating && user.tenantSlug) {
+      return <Navigate to={`/t/${user.tenantSlug}/inbox`} replace />;
     }
     if (slug) return <Navigate to={`/t/${slug}/inbox`} replace />;
     if (user.tenantSlug) return <Navigate to={`/t/${user.tenantSlug}`} replace />;
-    return <Navigate to="/" replace />;
+    return <Navigate to="/login" replace />;
   }
 
   async function onSubmit(event: FormEvent) {
@@ -46,14 +49,14 @@ export function LoginPage() {
     setError(null);
     try {
       const res = await login({ email, password, tenantSlug: slug });
-      if (res.user.role === "PLATFORM_OWNER" && !slug) {
+      if (res.user.role === "PLATFORM_OWNER" && !res.user.impersonating) {
         navigate("/admin");
       } else if (slug) {
         navigate(`/t/${slug}/inbox`);
       } else if (res.user.tenantSlug) {
         navigate(`/t/${res.user.tenantSlug}`);
       } else {
-        navigate("/");
+        navigate("/login");
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao entrar");
