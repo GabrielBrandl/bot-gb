@@ -14,6 +14,15 @@ import { PrismaService } from "../prisma/prisma.service";
 import { slugify } from "../common/utils/slugify";
 import { PlansService } from "./plans.service";
 
+type AccessCodeEntry = {
+  ownerId: string;
+  tenantId: string;
+  slug: string;
+  expiresAt: number;
+};
+
+const accessCodes = new Map<string, AccessCodeEntry>();
+
 export interface CreateTenantInput {
   companyName: string;
   adminName: string;
@@ -355,10 +364,6 @@ export class PlatformAdminService {
     const owner = await this.assertOwner(ownerId);
     const tenant = await this.getTenant(tenantId);
 
-    if (tenant.billingStatus === "suspended") {
-      // Super admin can still enter suspended tenants to fix them
-    }
-
     const user: AuthUser = {
       id: owner.id,
       tenantId: tenant.id,
@@ -382,6 +387,37 @@ export class PlatformAdminService {
       }),
       user,
     };
+  }
+
+  /** One-time code so Super Admin can open the company portal in a new tab without replacing their session. */
+  async createAccessLink(ownerId: string, tenantId: string) {
+    await this.assertOwner(ownerId);
+    const tenant = await this.getTenant(tenantId);
+    const code = `gb_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 12)}`;
+    accessCodes.set(code, {
+      ownerId,
+      tenantId: tenant.id,
+      slug: tenant.slug,
+      expiresAt: Date.now() + 2 * 60 * 1000,
+    });
+    return {
+      code,
+      slug: tenant.slug,
+      path: `/t/${tenant.slug}/acesso?code=${encodeURIComponent(code)}`,
+      expiresInSeconds: 120,
+    };
+  }
+
+  async exchangeAccessCode(code: string): Promise<AuthResponse> {
+    const entry = accessCodes.get(code);
+    if (!entry) {
+      throw new UnauthorizedException("Link de acesso inválido ou já usado");
+    }
+    accessCodes.delete(code);
+    if (Date.now() > entry.expiresAt) {
+      throw new UnauthorizedException("Link de acesso expirado. Gere outro no Super Admin.");
+    }
+    return this.impersonate(entry.ownerId, entry.tenantId);
   }
 
   async stopImpersonation(ownerId: string): Promise<AuthResponse> {

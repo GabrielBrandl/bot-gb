@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, Patch, Post, UseGuards, BadRequestException } from "@nestjs/common";
 import {
   IsBoolean,
   IsEmail,
@@ -284,6 +284,23 @@ export class PlansController {
   ) {
     await this.platform.assertOwner(user.id);
     return this.platform.updateUser(tenantId, userId, dto);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("PLATFORM_OWNER")
+  @Post("platform/tenants/:id/access-link")
+  async accessLink(@CurrentUser() user: AuthUser, @Param("id") id: string) {
+    await this.platform.assertOwner(user.id);
+    return this.platform.createAccessLink(user.id, id);
+  }
+
+  @Public()
+  @Post("platform/access/exchange")
+  exchangeAccess(@Body() body: { code?: string }) {
+    if (!body?.code) {
+      throw new BadRequestException("Código obrigatório");
+    }
+    return this.platform.exchangeAccessCode(body.code);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)

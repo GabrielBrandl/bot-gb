@@ -26,6 +26,7 @@ export interface Conversation {
   channel?: "WHATSAPP" | "INSTAGRAM";
   status: ConversationStatus;
   assignedTo?: string | null;
+  assignee?: { id: string; name: string; email?: string } | null;
   lastMessageAt?: string;
   lastMessage?: string;
   unreadCount?: number;
@@ -41,6 +42,8 @@ export interface Message {
   type?: string;
   createdAt: string;
   isInternal?: boolean;
+  sentByUserId?: string | null;
+  sentBy?: { id: string; name: string } | null;
 }
 
 export interface QuickReply {

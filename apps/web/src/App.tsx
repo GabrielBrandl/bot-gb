@@ -17,6 +17,7 @@ import { CampaignsPage } from "./pages/CampaignsPage";
 import { PaymentsPage } from "./pages/PaymentsPage";
 import { ReportsPage } from "./pages/ReportsPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { CompanyAccessPage } from "./pages/CompanyAccessPage";
 import { ErrorState, LoadingState } from "./components/ui/PageHeader";
 
 const FlowEditorPage = lazy(async () => {
@@ -33,11 +34,11 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return children;
 }
 
-/** Super Admin sem impersonação só acessa /admin — sem chat próprio. */
+/** Super Admin no painel de controle só acessa /admin. Em outra guia (empresa) o chat é normal. */
 function BlockOwnerFromTenantPortal({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user, loading, tabSession } = useAuth();
   if (loading) return null;
-  if (user?.role === "PLATFORM_OWNER" && !user.impersonating) {
+  if (user?.role === "PLATFORM_OWNER" && !user.impersonating && !tabSession) {
     return <Navigate to="/admin" replace />;
   }
   return children;
@@ -52,9 +53,6 @@ function RequireSuperAdmin({ children }: { children: React.ReactNode }) {
   if (user.role !== "PLATFORM_OWNER") {
     if (user.tenantSlug) return <Navigate to={`/t/${user.tenantSlug}`} replace />;
     return <Navigate to="/login" replace />;
-  }
-  if (user.impersonating && user.tenantSlug) {
-    return <Navigate to={`/t/${user.tenantSlug}/inbox`} replace />;
   }
   return children;
 }
@@ -119,6 +117,7 @@ export function App() {
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/planos" element={<PricingPage />} />
       <Route path="/t/:slug/login" element={<LoginPage />} />
+      <Route path="/t/:slug/acesso" element={<CompanyAccessPage />} />
 
       <Route
         path="/admin"

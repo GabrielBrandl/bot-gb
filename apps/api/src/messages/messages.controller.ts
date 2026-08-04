@@ -39,6 +39,12 @@ export class MessagesController {
     @Param("conversationId") conversationId: string,
     @Body() dto: SendMessageDto,
   ) {
-    return this.messagesService.sendText(user.tenantId, conversationId, dto.content, dto.mediaUrl);
+    return this.messagesService.sendText(
+      user.tenantId,
+      conversationId,
+      dto.content,
+      dto.mediaUrl,
+      { id: user.id, name: user.name },
+    );
   }
 }

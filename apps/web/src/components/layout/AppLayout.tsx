@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { NavLink, Outlet, useNavigate, useParams } from "react-router-dom";
+import { NavLink, Outlet, useParams } from "react-router-dom";
 import {
   Bot,
   CreditCard,
@@ -15,15 +15,11 @@ import {
   X,
   BarChart3,
   Shield,
-  Undo2,
 } from "lucide-react";
-import type { AuthResponse } from "@bot-wpp/shared-types";
 import { useAuth } from "../../lib/auth";
-import { platformApi } from "../../lib/api";
 import { cn } from "../../lib/utils";
-import { btnSecondary } from "../ui/PageHeader";
 
-/** Menus do portal do cliente (admin/supervisor/atendente). Super Admin só vê isso ao entrar em uma empresa. */
+/** Menus do portal do cliente. Super Admin só vê isso ao abrir a empresa em outra guia. */
 const tenantNav = [
   { to: "", label: "Início", icon: LayoutDashboard, end: true, roles: ["ADMIN", "SUPERVISOR", "AGENT"] },
   { to: "inbox", label: "Inbox", icon: Inbox, roles: ["ADMIN", "SUPERVISOR", "AGENT"] },
@@ -38,27 +34,20 @@ const tenantNav = [
 ];
 
 export function AppLayout() {
-  const { user, token, logout, persistAuth } = useAuth();
-  const navigate = useNavigate();
+  const { user, logout, tabSession } = useAuth();
   const { slug } = useParams();
   const [mobileOpen, setMobileOpen] = useState(false);
   const isOwner = user?.role === "PLATFORM_OWNER";
   const isControlPanel = Boolean(isOwner && !user?.impersonating);
+  const inCompanyPortal = Boolean(user?.impersonating || tabSession);
   const base = slug ? `/t/${slug}` : "";
 
   const navItems = tenantNav.filter((item) => {
     if (!user) return false;
     if (isControlPanel) return false;
-    if (user.impersonating) return true;
+    if (inCompanyPortal) return true;
     return item.roles.includes(user.role);
   });
-
-  async function exitImpersonation() {
-    if (!token) return;
-    const auth = (await platformApi.stopImpersonation(token)) as AuthResponse;
-    persistAuth(auth);
-    navigate("/admin");
-  }
 
   return (
     <div className="flex min-h-screen">
@@ -88,9 +77,7 @@ export function AppLayout() {
             <div>
               <p className="gb-display text-sm font-bold tracking-wide text-white">GB Systems</p>
               <p className="truncate text-[11px] text-[var(--gb-muted)]">
-                {isControlPanel
-                  ? "Painel Super Admin"
-                  : user?.tenantName ?? "Portal da empresa"}
+                {isControlPanel ? "Painel Super Admin" : user?.tenantName ?? "Portal da empresa"}
               </p>
             </div>
           </div>
@@ -147,8 +134,8 @@ export function AppLayout() {
             <p className="truncate text-xs text-[var(--gb-muted)]">
               {isControlPanel
                 ? "Super Admin"
-                : user?.impersonating
-                  ? "Super Admin (na empresa)"
+                : inCompanyPortal
+                  ? "Acesso empresa"
                   : user?.role === "AGENT"
                     ? "Atendente"
                     : user?.role === "ADMIN"
@@ -172,23 +159,12 @@ export function AppLayout() {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        {user?.impersonating ? (
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-500/30 bg-amber-500/15 px-4 py-2 text-sm text-amber-100">
-            <p>
-              Você entrou no portal de <strong>{user.tenantName}</strong> — pode ver chat, configs e tudo do cliente.
-            </p>
-            <button type="button" className={btnSecondary} onClick={() => void exitImpersonation()}>
-              <Undo2 className="mr-1 inline h-4 w-4" /> Voltar ao painel
-            </button>
-          </div>
-        ) : null}
-
         <div className="flex items-center gap-3 border-b border-[var(--gb-border)] bg-[var(--gb-bg-elevated)]/80 px-4 py-3 backdrop-blur lg:hidden">
           <button type="button" className="rounded-lg p-2 text-[var(--gb-cyan)] hover:bg-white/5" onClick={() => setMobileOpen(true)}>
             <Menu className="h-5 w-5" />
           </button>
           <p className="text-sm font-bold text-white">
-            {isControlPanel ? "Super Admin" : "GB Systems"}
+            {isControlPanel ? "Super Admin" : user?.tenantName || "GB Systems"}
           </p>
         </div>
 

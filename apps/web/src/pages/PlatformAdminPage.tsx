@@ -1,5 +1,4 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import {
   Building2,
   Copy,
@@ -58,8 +57,7 @@ type Overview = {
 };
 
 export function PlatformAdminPage() {
-  const { token, user, persistAuth } = useAuth();
-  const navigate = useNavigate();
+  const { token, user } = useAuth();
   const [overview, setOverview] = useState<Overview | null>(null);
   const [tenants, setTenants] = useState<TenantRow[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -174,11 +172,15 @@ export function PlatformAdminPage() {
     if (!token) return;
     setBusy(true);
     try {
-      const auth = await platformApi.impersonate(token, tenant.id);
-      persistAuth(auth);
-      navigate(`/t/${tenant.slug}/inbox`);
+      const link = await platformApi.accessLink(token, tenant.id);
+      const url = `${window.location.origin}${link.path}`;
+      const opened = window.open(url, "_blank", "noopener,noreferrer");
+      if (!opened) {
+        // popup blocked — fallback same tab only if needed
+        window.location.href = url;
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao entrar na empresa");
+      setError(err instanceof Error ? err.message : "Erro ao abrir empresa");
     } finally {
       setBusy(false);
     }
@@ -396,7 +398,7 @@ export function PlatformAdminPage() {
                 <Copy className="mr-1 inline h-4 w-4" /> Copiar link
               </button>
               <button type="button" className={btnPrimary} disabled={busy} onClick={() => void enterCompany(selected)}>
-                <LogIn className="mr-1 inline h-4 w-4" /> Entrar na empresa
+                <LogIn className="mr-1 inline h-4 w-4" /> Abrir painel (nova guia)
               </button>
             </div>
           </div>

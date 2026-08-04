@@ -110,6 +110,7 @@ model User {
   updatedAt    DateTime @updatedAt
 
   assignedConversations Conversation[] @relation("AssignedAgent")
+  sentMessages          Message[]      @relation("MessageSender")
 
   @@index([tenantId])
   @@map("users")
@@ -235,10 +236,13 @@ model Message {
   externalId     String?
   isInternal     Boolean      @default(false)
   channel        Channel      @default(WHATSAPP)
+  sentByUserId   String?
+  sentBy         User?        @relation("MessageSender", fields: [sentByUserId], references: [id], onDelete: SetNull)
   createdAt      DateTime     @default(now())
 
   @@index([conversationId, createdAt])
   @@index([tenantId])
+  @@index([sentByUserId])
   @@map("messages")
 }
 

@@ -282,6 +282,12 @@ export const platformApi = {
       { method: "POST" },
       token,
     ),
+  accessLink: (token: string, tenantId: string) =>
+    apiRequest<{ code: string; slug: string; path: string; expiresInSeconds: number }>(
+      `/platform/tenants/${tenantId}/access-link`,
+      { method: "POST" },
+      token,
+    ),
   stopImpersonation: (token: string) =>
     apiRequest<import("@bot-wpp/shared-types").AuthResponse>(
       "/platform/stop-impersonation",

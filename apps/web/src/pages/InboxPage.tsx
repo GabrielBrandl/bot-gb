@@ -241,6 +241,11 @@ export function InboxPage() {
                       {conv.contact?.phone ?? (conv.contact?.username ? `@${conv.contact.username}` : "")}
                     </p>
                   </div>
+                  {conv.assignee?.name ? (
+                    <p className="mt-1 truncate text-xs text-[var(--gb-cyan)]">Atendendo: {conv.assignee.name}</p>
+                  ) : (
+                    <p className="mt-1 text-xs text-amber-400/80">Sem atendente</p>
+                  )}
                   {conv.lastMessageAt ? (
                     <p className="mt-1 text-xs text-slate-500">
                       {formatDistanceToNow(new Date(conv.lastMessageAt), { addSuffix: true, locale: ptBR })}
@@ -266,6 +271,11 @@ export function InboxPage() {
                       ? `@${selected.contact?.username ?? selected.contact?.instagramId ?? "instagram"}`
                       : selected.contact?.phone}
                   </p>
+                  <p className="mt-1 text-xs text-[var(--gb-cyan)]">
+                    {selected.assignee?.name
+                      ? `Atendendo: ${selected.assignee.name}`
+                      : "Ninguém atendendo ainda — ao enviar, a conversa fica com você"}
+                  </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <select className={selectClass} value={selected.status} onChange={(e) => void handleStatusChange(e.target.value)}>
@@ -274,7 +284,7 @@ export function InboxPage() {
                     <option value="closed">Fechada</option>
                   </select>
                   <button type="button" className={btnSecondary} onClick={() => void handleAssignSelf()}>
-                    Atribuir a mim
+                    {selected.assignedTo === user?.id ? "Atribuída a mim" : "Atribuir a mim"}
                   </button>
                 </div>
               </div>
@@ -295,6 +305,9 @@ export function InboxPage() {
                               : "bg-white/10 text-slate-100"
                           }`}
                         >
+                          {msg.direction === "outbound" && msg.sentBy?.name ? (
+                            <p className="mb-1 text-[11px] font-semibold opacity-80">{msg.sentBy.name}</p>
+                          ) : null}
                           <p className="whitespace-pre-wrap">{msg.content}</p>
                           <p className="mt-1 text-xs opacity-60">
                             {formatDistanceToNow(new Date(msg.createdAt), { addSuffix: true, locale: ptBR })}

@@ -4,6 +4,15 @@ import { PrismaService } from "../prisma/prisma.service";
 import { RealtimeService } from "../realtime/realtime.service";
 import { EvolutionClient } from "../whatsapp/evolution.client";
 
+export type MessageAgent = { id: string; name: string };
+
+/** Prefixa o nome do atendente para o cliente ver no WhatsApp/Instagram. */
+export function withAgentSignature(agentName: string, content: string): string {
+  const name = agentName.trim();
+  if (!name) return content;
+  return `*${name}:*\n${content}`;
+}
+
 @Injectable()
 export class MessagesService {
   constructor(
@@ -21,11 +30,20 @@ export class MessagesService {
     }
     return this.prisma.message.findMany({
       where: { tenantId, conversationId },
+      include: {
+        sentBy: { select: { id: true, name: true } },
+      },
       orderBy: { createdAt: "asc" },
     });
   }
 
-  async sendText(tenantId: string, conversationId: string, content: string, mediaUrl?: string) {
+  async sendText(
+    tenantId: string,
+    conversationId: string,
+    content: string,
+    mediaUrl?: string,
+    agent?: MessageAgent | null,
+  ) {
     const conversation = await this.prisma.conversation.findFirst({
       where: { id: conversationId, tenantId },
       include: {
@@ -40,6 +58,7 @@ export class MessagesService {
     }
 
     const channel = conversation.channel ?? Channel.WHATSAPP;
+    const outboundContent = agent?.name ? withAgentSignature(agent.name, content) : content;
 
     if (channel === Channel.WHATSAPP) {
       const instance = conversation.instance;
@@ -52,9 +71,9 @@ export class MessagesService {
 
       if (!isDemoOrDisconnected && instance && phone) {
         if (mediaUrl) {
-          await this.evolution.sendMedia(instance.evolutionInstanceId, phone, mediaUrl, content);
+          await this.evolution.sendMedia(instance.evolutionInstanceId, phone, mediaUrl, outboundContent);
         } else {
-          await this.evolution.sendText(instance.evolutionInstanceId, phone, content);
+          await this.evolution.sendText(instance.evolutionInstanceId, phone, outboundContent);
         }
       }
     }
@@ -65,16 +84,37 @@ export class MessagesService {
         conversationId,
         direction: "outbound",
         type: mediaUrl ? "media" : "text",
-        content,
+        // Guarda o texto digitado; o prefixo com nome vai só no WhatsApp do cliente.
+        content: agent?.name ? content : outboundContent,
         mediaUrl,
         channel,
+        sentByUserId: agent?.id ?? null,
+      },
+      include: {
+        sentBy: { select: { id: true, name: true } },
       },
     });
 
     const now = new Date();
-    await this.prisma.conversation.update({
+    const conversationUpdate: {
+      lastMessageAt: Date;
+      assignedTo?: string;
+      status?: string;
+    } = { lastMessageAt: now };
+
+    if (agent?.id) {
+      conversationUpdate.assignedTo = agent.id;
+      if (conversation.status === "pending") {
+        conversationUpdate.status = "open";
+      }
+    }
+
+    const updatedConversation = await this.prisma.conversation.update({
       where: { id: conversationId },
-      data: { lastMessageAt: now },
+      data: conversationUpdate,
+      include: {
+        assignee: { select: { id: true, name: true, email: true } },
+      },
     });
 
     this.realtime.emitToTenant(tenantId, "message:new", {
@@ -85,6 +125,7 @@ export class MessagesService {
         content: message.content,
         createdAt: message.createdAt.toISOString(),
         channel,
+        sentBy: message.sentBy,
       },
     });
 
@@ -92,6 +133,9 @@ export class MessagesService {
       id: conversationId,
       lastMessageAt: now.toISOString(),
       channel,
+      assignedTo: updatedConversation.assignedTo,
+      assignee: updatedConversation.assignee,
+      status: updatedConversation.status,
     });
 
     return message;
