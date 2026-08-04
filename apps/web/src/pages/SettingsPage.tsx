@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { Plus, QrCode, RefreshCw, Trash2 } from "lucide-react";
 import { useAuth } from "../lib/auth";
-import { tenantsApi, usersApi, whatsappApi } from "../lib/api";
+import { tenantsApi, usersApi, whatsappApi, instagramApi, plansApi } from "../lib/api";
 import type { TeamUser, Tenant, WhatsappInstance } from "../lib/types";
 import { Badge, statusBadgeVariant, statusLabel } from "../components/ui/Badge";
 import {
@@ -15,16 +15,18 @@ import {
   PageHeader,
 } from "../components/ui/PageHeader";
 
-type Tab = "whatsapp" | "equipe" | "marca" | "plano";
+type Tab = "whatsapp" | "instagram" | "equipe" | "marca" | "plano";
 
 export function SettingsPage() {
   const { token } = useAuth();
   const [tab, setTab] = useState<Tab>("whatsapp");
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [instances, setInstances] = useState<WhatsappInstance[]>([]);
+  const [igAccounts, setIgAccounts] = useState<Array<{ id: string; name: string; igUsername?: string | null; status: string }>>([]);
   const [users, setUsers] = useState<TeamUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [igName, setIgName] = useState("");
 
   // WhatsApp
   const [instanceName, setInstanceName] = useState("");
@@ -39,24 +41,26 @@ export function SettingsPage() {
 
   // Marca
   const [logoUrl, setLogoUrl] = useState("");
-  const [primaryColor, setPrimaryColor] = useState("#0033B5");
+  const [primaryColor, setPrimaryColor] = useState("#2F6BFF");
   const [savingBrand, setSavingBrand] = useState(false);
 
   async function load() {
     if (!token) return;
     setLoading(true);
     try {
-      const [t, i, u] = await Promise.all([
+      const [t, i, u, ig] = await Promise.all([
         tenantsApi.me(token).catch(() => null),
         whatsappApi.listInstances(token).catch(() => []),
         usersApi.list(token).catch(() => []),
+        instagramApi.listAccounts(token).catch(() => []),
       ]);
       setTenant(t);
       setInstances(i);
       setUsers(u);
+      setIgAccounts(ig);
       if (t) {
-        setLogoUrl(t.logoUrl ?? "");
-        setPrimaryColor(t.primaryColor ?? t.brandColor ?? "#0033B5");
+        setLogoUrl(t.logoUrl ?? "/brand/gb-systems-logo.png");
+        setPrimaryColor(t.primaryColor ?? t.brandColor ?? "#2F6BFF");
       }
       setError(null);
     } catch (err) {
@@ -157,10 +161,40 @@ export function SettingsPage() {
 
   const tabs: { id: Tab; label: string }[] = [
     { id: "whatsapp", label: "WhatsApp" },
+    { id: "instagram", label: "Instagram" },
     { id: "equipe", label: "Equipe" },
     { id: "marca", label: "Marca" },
     { id: "plano", label: "Plano" },
   ];
+
+  async function handleCreateIg(e: FormEvent) {
+    e.preventDefault();
+    if (!token || !igName.trim()) return;
+    try {
+      const created = await instagramApi.createAccount(token, igName.trim());
+      await instagramApi.connect(token, created.id);
+      setIgName("");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao conectar Instagram");
+    }
+  }
+
+  async function handleDeleteIg(id: string) {
+    if (!token || !confirm("Remover conta Instagram?")) return;
+    await instagramApi.remove(token, id);
+    await load();
+  }
+
+  async function handleSubscribe(planId: string) {
+    if (!token) return;
+    try {
+      await plansApi.subscribe(token, planId);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao alterar plano");
+    }
+  }
 
   if (loading) return <LoadingState />;
 
@@ -190,8 +224,8 @@ export function SettingsPage() {
       {tab === "whatsapp" && (
         <div className="space-y-6">
           <Card>
-            <h2 className="mb-2 text-lg font-medium text-[var(--abs-blue-dark)]">Instâncias WhatsApp</h2>
-            <ol className="mb-4 list-decimal space-y-1 pl-5 text-sm text-[var(--abs-muted)]">
+            <h2 className="mb-2 text-lg font-medium text-white">Instâncias WhatsApp</h2>
+            <ol className="mb-4 list-decimal space-y-1 pl-5 text-sm text-[var(--gb-muted)]">
               <li>Crie uma nova instância (não use a demo para QR real).</li>
               <li>Clique no ícone de QR e escaneie com o WhatsApp do celular.</li>
               <li>Aguarde o status mudar para Conectado; use Atualizar se necessário.</li>
@@ -199,7 +233,7 @@ export function SettingsPage() {
             <form onSubmit={handleCreateInstance} className="mb-4 flex flex-wrap gap-2">
               <input
                 className={`${inputClass} max-w-xs`}
-                placeholder="Nome da instância (ex: ABS Principal)"
+                placeholder="Nome da instância (ex: GB Principal)"
                 value={instanceName}
                 onChange={(e) => setInstanceName(e.target.value)}
                 required
@@ -329,6 +363,51 @@ export function SettingsPage() {
         </div>
       )}
 
+      {tab === "instagram" && (
+        <div className="space-y-6">
+          <Card>
+            <h2 className="mb-2 text-lg font-medium text-white">Contas Instagram</h2>
+            <p className="mb-4 text-sm text-[var(--gb-muted)]">
+              Conecte Instagram Business via Meta Graph API (DM oficial). Em modo demo, crie a conta e use
+              &quot;Simular IG&quot; no Inbox. Configure META_APP_ID / META_APP_SECRET / META_WEBHOOK_VERIFY_TOKEN no .env para produção.
+            </p>
+            <form onSubmit={handleCreateIg} className="mb-4 flex flex-wrap gap-2">
+              <input
+                className={`${inputClass} max-w-xs`}
+                placeholder="Nome da conta (ex: @suaempresa)"
+                value={igName}
+                onChange={(e) => setIgName(e.target.value)}
+                required
+              />
+              <button type="submit" className={btnPrimary}>
+                <Plus className="mr-1.5 inline h-4 w-4" />
+                Conectar Instagram
+              </button>
+            </form>
+            {igAccounts.length === 0 ? (
+              <p className="text-sm text-[var(--gb-muted)]">Nenhuma conta Instagram.</p>
+            ) : (
+              <div className="space-y-3">
+                {igAccounts.map((acc) => (
+                  <div key={acc.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--gb-border)] bg-white/5 p-4">
+                    <div>
+                      <p className="font-medium text-white">{acc.name}</p>
+                      <p className="text-xs text-[var(--gb-muted)]">@{acc.igUsername ?? "instagram"}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant={statusBadgeVariant(acc.status)}>{statusLabel(acc.status)}</Badge>
+                      <button type="button" className={btnDanger} onClick={() => void handleDeleteIg(acc.id)}>
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+        </div>
+      )}
+
       {tab === "equipe" && (
         <Card>
           <h2 className="mb-4 text-lg font-medium text-[var(--abs-blue-dark)]">Usuários da equipe</h2>
@@ -394,31 +473,41 @@ export function SettingsPage() {
 
       {tab === "plano" && (
         <Card>
-          <h2 className="mb-4 text-lg font-medium text-[var(--abs-blue-dark)]">Plano atual</h2>
+          <h2 className="mb-4 text-lg font-medium text-white">Plano atual</h2>
           {tenant ? (
             <div className="space-y-4">
               <div>
-                <p className="text-sm text-[var(--abs-muted)]">Plano</p>
-                <p className="text-xl font-semibold text-[var(--abs-blue)]">{tenant.plan ?? "Free"}</p>
+                <p className="text-sm text-[var(--gb-muted)]">Plano</p>
+                <p className="text-xl font-semibold text-[var(--gb-cyan)]">{tenant.plan ?? "STARTER"}</p>
               </div>
-              {tenant.planLimits ? (
-                <div>
-                  <p className="mb-2 text-sm text-[var(--abs-muted)]">Limites</p>
-                  <dl className="space-y-2">
-                    {Object.entries(tenant.planLimits).map(([key, value]) => (
-                      <div key={key} className="flex justify-between rounded-lg bg-white px-4 py-2 text-sm">
-                        <dt className="text-[var(--abs-muted)]">{key}</dt>
-                        <dd className="text-[var(--abs-blue-dark)]">{value}</dd>
-                      </div>
-                    ))}
-                  </dl>
+              <div className="grid gap-2 sm:grid-cols-3">
+                {(["STARTER", "PRO", "ENTERPRISE"] as const).map((planId) => (
+                  <button
+                    key={planId}
+                    type="button"
+                    className={tenant.plan === planId ? btnPrimary : btnSecondary}
+                    onClick={() => void handleSubscribe(planId)}
+                  >
+                    {planId === "STARTER" ? "Starter" : planId === "PRO" ? "Professional" : "Enterprise"}
+                  </button>
+                ))}
+              </div>
+              <dl className="grid gap-2 sm:grid-cols-2">
+                <div className="rounded-lg bg-white/5 px-4 py-2 text-sm">
+                  <dt className="text-[var(--gb-muted)]">Agentes</dt>
+                  <dd className="text-white">{tenant.maxAgents ?? "—"}</dd>
                 </div>
-              ) : (
-                <p className="text-sm text-[var(--abs-muted)]">Limites do plano não disponíveis.</p>
-              )}
+                <div className="rounded-lg bg-white/5 px-4 py-2 text-sm">
+                  <dt className="text-[var(--gb-muted)]">WhatsApp</dt>
+                  <dd className="text-white">{tenant.maxInstances ?? "—"}</dd>
+                </div>
+              </dl>
+              <a href="/planos" className="inline-flex text-sm font-semibold text-[var(--gb-violet)] hover:underline">
+                Ver comparação completa de planos →
+              </a>
             </div>
           ) : (
-            <p className="text-sm text-[var(--abs-muted)]">Dados do tenant indisponíveis.</p>
+            <p className="text-sm text-[var(--gb-muted)]">Dados do tenant indisponíveis.</p>
           )}
         </Card>
       )}

@@ -7,7 +7,7 @@ const browser = await chromium.launch({ executablePath: chrome, headless: true }
 const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
 
 await page.goto("http://localhost:5173/login", { waitUntil: "networkidle", timeout: 30000 });
-await page.fill('input[type="email"], input[name="email"]', "admin@absresolve.com");
+await page.fill('input[type="email"], input[name="email"]', "admin@gbsystems.com.br");
 await page.fill('input[type="password"], input[name="password"]', "admin123");
 await page.click('button[type="submit"]');
 await page.waitForTimeout(2500);

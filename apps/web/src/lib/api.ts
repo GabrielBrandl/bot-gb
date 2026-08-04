@@ -49,19 +49,65 @@ export const whatsappApi = {
     }, token),
 };
 
+export const instagramApi = {
+  listAccounts: (token: string) =>
+    apiRequest<Array<{
+      id: string;
+      name: string;
+      igUsername?: string | null;
+      status: string;
+    }>>("/instagram/accounts", {}, token),
+  createAccount: (token: string, name: string) =>
+    apiRequest<{ id: string; name: string; status: string }>("/instagram/accounts", {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    }, token),
+  connect: (token: string, id: string) =>
+    apiRequest(`/instagram/accounts/${id}/connect`, { method: "POST" }, token),
+  remove: (token: string, id: string) =>
+    apiRequest(`/instagram/accounts/${id}`, { method: "DELETE" }, token),
+  demoInbound: (token: string, data: { username?: string; text: string; accountId?: string }) =>
+    apiRequest("/instagram/demo/inbound", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }, token),
+};
+
+export const plansApi = {
+  list: () => apiRequest("/plans"),
+  subscribe: (token: string, planId: string) =>
+    apiRequest("/plans/subscribe", {
+      method: "POST",
+      body: JSON.stringify({ planId }),
+    }, token),
+};
+
 // Conversations
 export const conversationsApi = {
-  list: (token: string, status?: string) => {
-    const qs = status ? `?status=${status}` : "";
+  list: (token: string, status?: string, channel?: string) => {
+    const params = new URLSearchParams();
+    if (status) params.set("status", status);
+    if (channel) params.set("channel", channel);
+    const qs = params.toString() ? `?${params}` : "";
     return apiRequest<Conversation[]>(`/conversations${qs}`, {}, token);
   },
   get: (token: string, id: string) =>
     apiRequest<Conversation>(`/conversations/${id}`, {}, token),
-  update: (token: string, id: string, data: { status?: string; assignedTo?: string | null }) =>
-    apiRequest<Conversation>(`/conversations/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify(data),
-    }, token),
+  update: async (token: string, id: string, data: { status?: string; assignedTo?: string | null }) => {
+    if (data.status) {
+      return apiRequest<Conversation>(`/conversations/${id}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: data.status }),
+      }, token);
+    }
+    if (data.assignedTo !== undefined) {
+      return apiRequest<Conversation>(`/conversations/${id}/assign`, {
+        method: "PATCH",
+        body: JSON.stringify({ assignedTo: data.assignedTo }),
+      }, token);
+    }
+    return apiRequest<Conversation>(`/conversations/${id}`, {}, token);
+  },
   addNote: (token: string, id: string, content: string) =>
     apiRequest<void>(`/conversations/${id}/notes`, {
       method: "POST",

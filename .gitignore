@@ -15,3 +15,5 @@ packages/database/generated
 uploads
 .idea
 .vscode
+screenshots
+smoke-results.txt

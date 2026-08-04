@@ -2,7 +2,7 @@ import { slugify } from "./slugify";
 
 describe("slugify", () => {
   it("normalizes accents and spaces", () => {
-    expect(slugify("ABS Resolve")).toBe("abs-resolve");
+    expect(slugify("GB Systems")).toBe("gb-systems");
     expect(slugify("Empresa São Paulo")).toBe("empresa-sao-paulo");
   });
 

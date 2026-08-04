@@ -47,8 +47,9 @@ export class ConversationsController {
     @Query("status") status?: string,
     @Query("assignedTo") assignedTo?: string,
     @Query("search") search?: string,
+    @Query("channel") channel?: string,
   ) {
-    return this.conversationsService.list(user.tenantId, { status, assignedTo, search });
+    return this.conversationsService.list(user.tenantId, { status, assignedTo, search, channel });
   }
 
   @Get(":id")

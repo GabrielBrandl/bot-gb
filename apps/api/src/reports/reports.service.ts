@@ -35,7 +35,7 @@ export class ReportsService {
       this.prisma.contact.count({ where: { tenantId } }),
     ]);
 
-    // Flat shape consumed by Dashboard + Relatórios (ABS Resolve admin UI).
+    // Flat shape consumed by Dashboard + Relatórios (GB Systems admin UI).
     return {
       conversationsOpen,
       conversationsPending,

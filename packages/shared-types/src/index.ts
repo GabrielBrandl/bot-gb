@@ -1,4 +1,6 @@
-export type UserRole = "ADMIN" | "SUPERVISOR" | "AGENT";
+export type UserRole = "PLATFORM_OWNER" | "ADMIN" | "SUPERVISOR" | "AGENT";
+export type Channel = "WHATSAPP" | "INSTAGRAM";
+export type PlanCode = "STARTER" | "PRO" | "ENTERPRISE";
 
 export interface AuthUser {
   id: string;
@@ -18,6 +20,7 @@ export interface RegisterRequest {
   name: string;
   email: string;
   password: string;
+  planId?: PlanCode;
 }
 
 export interface AuthResponse {
@@ -37,6 +40,32 @@ export type CampaignStatus = "draft" | "scheduled" | "running" | "completed" | "
 export type CampaignRecipientStatus = "pending" | "sent" | "failed";
 export type PaymentStatus = "pending" | "paid" | "cancelled" | "expired";
 export type WhatsappInstanceStatus = "disconnected" | "connecting" | "connected";
+export type InstagramAccountStatus = "disconnected" | "connecting" | "connected";
+
+export interface PlanPublic {
+  id: string;
+  code: PlanCode;
+  name: string;
+  description: string;
+  priceMonthly: number;
+  priceYearly: number;
+  maxAgents: number;
+  maxWhatsapp: number;
+  maxInstagram: number;
+  maxContacts: number;
+  maxFlows: number;
+  maxCampaigns: number;
+  aiEnabled: boolean;
+  instagramEnabled: boolean;
+  campaignsEnabled: boolean;
+  paymentsEnabled: boolean;
+  reportsEnabled: boolean;
+  whiteLabel: boolean;
+  prioritySupport: boolean;
+  features: string[];
+  highlight: boolean;
+  sortOrder: number;
+}
 
 export interface FlowNode {
   id: string;
@@ -65,6 +94,7 @@ export interface CampaignJobPayload {
   phone: string;
   message: string;
   instanceId?: string;
+  channel?: Channel;
 }
 
 export interface RealtimeEvents {
@@ -76,6 +106,7 @@ export interface RealtimeEvents {
       content: string;
       createdAt: string;
       isInternal?: boolean;
+      channel?: Channel;
     };
   };
   "conversation:updated": {
@@ -83,9 +114,11 @@ export interface RealtimeEvents {
     status?: string;
     assignedTo?: string | null;
     lastMessageAt?: string;
+    channel?: Channel;
   };
   "instance:status": {
     instanceId: string;
     status: string;
+    channel?: Channel;
   };
 }

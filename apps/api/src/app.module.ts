@@ -20,6 +20,8 @@ import { CampaignsModule } from "./campaigns/campaigns.module";
 import { PaymentsModule } from "./payments/payments.module";
 import { ReportsModule } from "./reports/reports.module";
 import { AuditModule } from "./audit/audit.module";
+import { InstagramModule } from "./instagram/instagram.module";
+import { PlansModule } from "./plans/plans.module";
 
 @Module({
   imports: [
@@ -45,6 +47,8 @@ import { AuditModule } from "./audit/audit.module";
     HealthModule,
     RealtimeModule,
     WhatsappModule,
+    InstagramModule,
+    PlansModule,
     ConversationsModule,
     MessagesModule,
     ContactsModule,

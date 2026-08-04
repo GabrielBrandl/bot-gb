@@ -21,8 +21,8 @@ interface AuthContextValue {
   user: AuthUser | null;
   token: string | null;
   loading: boolean;
-  login: (payload: LoginRequest) => Promise<void>;
-  register: (payload: RegisterRequest) => Promise<void>;
+  login: (payload: LoginRequest) => Promise<AuthResponse>;
+  register: (payload: RegisterRequest) => Promise<AuthResponse>;
   logout: () => void;
 }
 
@@ -82,6 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify(payload),
       });
       persist(data);
+      return data;
     },
     [persist],
   );
@@ -93,6 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify(payload),
       });
       persist(data);
+      return data;
     },
     [persist],
   );

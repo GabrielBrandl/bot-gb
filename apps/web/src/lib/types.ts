@@ -10,28 +10,27 @@ import type {
 
 export interface Contact {
   id: string;
-  name: string;
-  phone: string;
+  name?: string | null;
+  phone?: string | null;
+  instagramId?: string | null;
+  username?: string | null;
   email?: string | null;
   tags?: Tag[];
   createdAt?: string;
-}
-
-export interface Tag {
-  id: string;
-  name: string;
-  color?: string;
 }
 
 export interface Conversation {
   id: string;
   contactId: string;
   contact?: Contact;
+  channel?: "WHATSAPP" | "INSTAGRAM";
   status: ConversationStatus;
   assignedTo?: string | null;
   lastMessageAt?: string;
   lastMessage?: string;
   unreadCount?: number;
+  instagramAccount?: { id: string; name: string; igUsername?: string | null; status: string } | null;
+  instance?: { id: string; name: string; status: string } | null;
 }
 
 export interface Message {
@@ -146,6 +145,10 @@ export interface Tenant {
   primaryColor?: string | null;
   brandColor?: string | null;
   plan?: string;
+  maxAgents?: number;
+  maxInstances?: number;
+  maxInstagram?: number;
+  billingStatus?: string;
   planLimits?: Record<string, number>;
   createdAt?: string;
 }

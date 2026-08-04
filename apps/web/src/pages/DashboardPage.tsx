@@ -69,7 +69,7 @@ export function DashboardPage() {
     <div>
       <PageHeader
         title="Início"
-        description={`Bem-vindo, ${user?.name ?? "usuário"}. Visão geral da operação ABS Resolve.`}
+        description={`Bem-vindo, ${user?.name ?? "usuário"}. Visão geral da operação GB Systems.`}
       />
 
       {error ? (

@@ -14,7 +14,7 @@ import {
   Users,
   X,
   BarChart3,
-  Wrench,
+  Shield,
 } from "lucide-react";
 import { useAuth } from "../../lib/auth";
 import { cn } from "../../lib/utils";
@@ -35,13 +35,14 @@ const navItems = [
 export function AppLayout() {
   const { user, logout } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const isOwner = user?.role === "PLATFORM_OWNER";
 
   return (
-    <div className="flex min-h-screen bg-[var(--abs-bg)]">
+    <div className="flex min-h-screen">
       {mobileOpen ? (
         <button
           type="button"
-          className="fixed inset-0 z-40 bg-[var(--abs-blue-dark)]/40 lg:hidden"
+          className="fixed inset-0 z-40 bg-black/60 lg:hidden"
           onClick={() => setMobileOpen(false)}
           aria-label="Fechar menu"
         />
@@ -49,19 +50,21 @@ export function AppLayout() {
 
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-64 flex-col text-white transition-transform lg:static lg:translate-x-0",
-          "abs-gradient shadow-xl shadow-[var(--abs-blue-dark)]/20",
+          "fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-[var(--gb-border)] transition-transform lg:static lg:translate-x-0",
+          "bg-[linear-gradient(180deg,#0d1424_0%,#070b16_100%)]",
           mobileOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >
-        <div className="flex items-center justify-between border-b border-white/10 px-5 py-5">
+        <div className="flex items-center justify-between border-b border-[var(--gb-border)] px-4 py-4">
           <div className="flex items-center gap-3">
-            <div className="grid h-10 w-10 place-items-center rounded-xl bg-[var(--abs-yellow)] text-[var(--abs-blue-dark)]">
-              <Wrench className="h-5 w-5" />
-            </div>
+            <img
+              src="/brand/gb-systems-logo.png"
+              alt="GB Systems"
+              className="h-11 w-11 rounded-xl object-cover ring-1 ring-white/10"
+            />
             <div>
-              <p className="text-sm font-bold tracking-wide">ABS Resolve</p>
-              <p className="text-xs text-white/70">Atendimento WhatsApp</p>
+              <p className="gb-display text-sm font-bold tracking-wide text-white">GB Systems</p>
+              <p className="text-[11px] text-[var(--gb-muted)]">Omnichannel Platform</p>
             </div>
           </div>
           <button
@@ -75,6 +78,25 @@ export function AppLayout() {
 
         <nav className="flex-1 overflow-y-auto px-3 py-4">
           <ul className="space-y-1">
+            {isOwner ? (
+              <li>
+                <NavLink
+                  to="/admin"
+                  onClick={() => setMobileOpen(false)}
+                  className={({ isActive }) =>
+                    cn(
+                      "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition",
+                      isActive
+                        ? "gb-gradient text-white shadow-lg shadow-blue-500/20"
+                        : "text-white/80 hover:bg-white/5 hover:text-white",
+                    )
+                  }
+                >
+                  <Shield className="h-4 w-4 shrink-0" />
+                  Painel Admin
+                </NavLink>
+              </li>
+            ) : null}
             {navItems.map(({ to, label, icon: Icon, end }) => (
               <li key={to}>
                 <NavLink
@@ -85,8 +107,8 @@ export function AppLayout() {
                     cn(
                       "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition",
                       isActive
-                        ? "bg-[var(--abs-yellow)] text-[var(--abs-blue-dark)] shadow-sm"
-                        : "text-white/85 hover:bg-white/10 hover:text-white",
+                        ? "gb-gradient text-white shadow-lg shadow-blue-500/20"
+                        : "text-white/80 hover:bg-white/5 hover:text-white",
                     )
                   }
                 >
@@ -98,15 +120,15 @@ export function AppLayout() {
           </ul>
         </nav>
 
-        <div className="border-t border-white/10 px-4 py-4">
+        <div className="border-t border-[var(--gb-border)] px-4 py-4">
           <div className="mb-3 truncate">
             <p className="truncate text-sm font-semibold text-white">{user?.name}</p>
-            <p className="truncate text-xs text-white/65">{user?.email}</p>
+            <p className="truncate text-xs text-[var(--gb-muted)]">{user?.email}</p>
           </div>
           <button
             type="button"
             onClick={logout}
-            className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-white/80 transition hover:bg-white/10 hover:text-white"
+            className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-white/80 transition hover:bg-white/5 hover:text-white"
           >
             <LogOut className="h-4 w-4" />
             Sair
@@ -115,15 +137,15 @@ export function AppLayout() {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex items-center gap-3 border-b border-[var(--abs-gray)] bg-white px-4 py-3 lg:hidden">
+        <div className="flex items-center gap-3 border-b border-[var(--gb-border)] bg-[var(--gb-bg-elevated)]/80 px-4 py-3 backdrop-blur lg:hidden">
           <button
             type="button"
-            className="rounded-lg p-2 text-[var(--abs-blue)] hover:bg-[var(--abs-bg)]"
+            className="rounded-lg p-2 text-[var(--gb-cyan)] hover:bg-white/5"
             onClick={() => setMobileOpen(true)}
           >
             <Menu className="h-5 w-5" />
           </button>
-          <p className="text-sm font-bold text-[var(--abs-blue-dark)]">ABS Resolve</p>
+          <p className="text-sm font-bold text-white">GB Systems</p>
         </div>
 
         <main className="flex-1 overflow-auto p-4 lg:p-6">

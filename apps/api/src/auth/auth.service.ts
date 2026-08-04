@@ -29,12 +29,29 @@ export class AuthService {
 
     const slug = await this.ensureUniqueTenantSlug(slugify(dto.tenantName));
     const passwordHash = await bcrypt.hash(dto.password, 10);
+    const planId = dto.planId ?? "STARTER";
+    const plan = await this.prisma.plan.findUnique({ where: { id: planId } });
+    if (!plan) {
+      throw new ConflictException("Plano inválido");
+    }
+
+    const trialEndsAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
 
     const result = await this.prisma.$transaction(async (tx) => {
       const tenant = await tx.tenant.create({
         data: {
           name: dto.tenantName,
           slug,
+          planId: plan.id,
+          plan: plan.code,
+          maxAgents: plan.maxAgents,
+          maxInstances: plan.maxWhatsapp,
+          maxInstagram: plan.maxInstagram,
+          maxContacts: plan.maxContacts,
+          primaryColor: "#2F6BFF",
+          logoUrl: "/brand/gb-systems-logo.png",
+          billingStatus: "trialing",
+          trialEndsAt,
         },
       });
 
@@ -51,18 +68,33 @@ export class AuthService {
       const board = await tx.kanbanBoard.create({
         data: {
           tenantId: tenant.id,
-          name: "Funil de Vendas",
+          name: "Funil Omnichannel",
         },
       });
 
       await tx.kanbanStage.createMany({
         data: [
           { tenantId: tenant.id, boardId: board.id, name: "Novo lead", order: 0 },
-          { tenantId: tenant.id, boardId: board.id, name: "Orçamento", order: 1 },
-          { tenantId: tenant.id, boardId: board.id, name: "Agendado", order: 2 },
-          { tenantId: tenant.id, boardId: board.id, name: "Concluído", order: 3 },
-          { tenantId: tenant.id, boardId: board.id, name: "Pago", order: 4 },
+          { tenantId: tenant.id, boardId: board.id, name: "Qualificação", order: 1 },
+          { tenantId: tenant.id, boardId: board.id, name: "Proposta", order: 2 },
+          { tenantId: tenant.id, boardId: board.id, name: "Fechado", order: 3 },
         ],
+      });
+
+      await tx.businessHours.create({
+        data: {
+          tenantId: tenant.id,
+          timezone: "America/Manaus",
+          schedule: {
+            mon: { open: "08:00", close: "18:00" },
+            tue: { open: "08:00", close: "18:00" },
+            wed: { open: "08:00", close: "18:00" },
+            thu: { open: "08:00", close: "18:00" },
+            fri: { open: "08:00", close: "18:00" },
+            sat: null,
+            sun: null,
+          },
+        },
       });
 
       return user;

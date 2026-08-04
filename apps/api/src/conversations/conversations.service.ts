@@ -11,19 +11,21 @@ export class ConversationsService {
 
   list(
     tenantId: string,
-    filters: { status?: string; assignedTo?: string; search?: string },
+    filters: { status?: string; assignedTo?: string; search?: string; channel?: string },
   ) {
     return this.prisma.conversation.findMany({
       where: {
         tenantId,
         ...(filters.status ? { status: filters.status } : {}),
         ...(filters.assignedTo ? { assignedTo: filters.assignedTo } : {}),
+        ...(filters.channel ? { channel: filters.channel as "WHATSAPP" | "INSTAGRAM" } : {}),
         ...(filters.search
           ? {
               contact: {
                 OR: [
                   { name: { contains: filters.search, mode: "insensitive" } },
                   { phone: { contains: filters.search } },
+                  { username: { contains: filters.search, mode: "insensitive" } },
                 ],
               },
             }
@@ -33,6 +35,7 @@ export class ConversationsService {
         contact: true,
         assignee: { select: { id: true, name: true, email: true } },
         instance: { select: { id: true, name: true, status: true } },
+        instagramAccount: { select: { id: true, name: true, igUsername: true, status: true } },
         messages: { orderBy: { createdAt: "desc" }, take: 1 },
       },
       orderBy: { lastMessageAt: "desc" },
@@ -46,6 +49,7 @@ export class ConversationsService {
         contact: { include: { tags: true } },
         assignee: { select: { id: true, name: true, email: true } },
         instance: true,
+        instagramAccount: true,
         messages: { orderBy: { createdAt: "asc" } },
       },
     });

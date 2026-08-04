@@ -5,6 +5,8 @@ import { AppLayout } from "./components/layout/AppLayout";
 import { DashboardPage } from "./pages/DashboardPage";
 import { LoginPage } from "./pages/LoginPage";
 import { RegisterPage } from "./pages/RegisterPage";
+import { PricingPage } from "./pages/PricingPage";
+import { PlatformAdminPage } from "./pages/PlatformAdminPage";
 import { InboxPage } from "./pages/InboxPage";
 import { KanbanPage } from "./pages/KanbanPage";
 import { ContactsPage } from "./pages/ContactsPage";
@@ -26,7 +28,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
   if (loading) {
     return (
-      <div className="grid min-h-screen place-items-center text-slate-600">
+      <div className="grid min-h-screen place-items-center text-[var(--gb-muted)]">
         Carregando...
       </div>
     );
@@ -44,6 +46,7 @@ export function App() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
+      <Route path="/planos" element={<PricingPage />} />
       <Route
         element={
           <ProtectedRoute>
@@ -52,6 +55,7 @@ export function App() {
         }
       >
         <Route index element={<DashboardPage />} />
+        <Route path="admin" element={<PlatformAdminPage />} />
         <Route path="inbox" element={<InboxPage />} />
         <Route path="kanban" element={<KanbanPage />} />
         <Route path="contatos" element={<ContactsPage />} />

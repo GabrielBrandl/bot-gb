@@ -77,7 +77,7 @@ export class PaymentsService {
     }
 
     const billingType = data.billingType ?? "UNDEFINED";
-    const description = data.description ?? "Pagamento ABS Resolve";
+    const description = data.description ?? "Pagamento GB Systems";
 
     const asaasPayment = await this.asaas.createCharge({
       customerName: contact.name ?? contact.phone,

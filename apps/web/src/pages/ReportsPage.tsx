@@ -105,7 +105,7 @@ export function ReportsPage() {
 
   return (
     <div>
-      <PageHeader title="Relatórios" description="Entradas, saídas e visão geral da operação ABS Resolve." />
+      <PageHeader title="Relatórios" description="Entradas, saídas e visão geral da operação GB Systems." />
 
       {error ? (
         <ErrorState message={error} />

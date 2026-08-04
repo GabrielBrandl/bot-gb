@@ -1,10 +1,11 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { FlaskConical, Send } from "lucide-react";
+import { FlaskConical, Instagram, MessageCircle, Send } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import {
   conversationsApi,
+  instagramApi,
   messagesApi,
   quickRepliesApi,
   whatsappApi,
@@ -29,6 +30,7 @@ export function InboxPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [quickReplies, setQuickReplies] = useState<QuickReply[]>([]);
   const [statusFilter, setStatusFilter] = useState("");
+  const [channelFilter, setChannelFilter] = useState("");
   const [draft, setDraft] = useState("");
   const [loading, setLoading] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
@@ -42,7 +44,11 @@ export function InboxPage() {
   const loadConversations = useCallback(async () => {
     if (!token) return;
     try {
-      const data = await conversationsApi.list(token, statusFilter || undefined);
+      const data = await conversationsApi.list(
+        token,
+        statusFilter || undefined,
+        channelFilter || undefined,
+      );
       setConversations(data);
       setError(null);
     } catch (err) {
@@ -50,7 +56,7 @@ export function InboxPage() {
     } finally {
       setLoading(false);
     }
-  }, [token, statusFilter]);
+  }, [token, statusFilter, channelFilter]);
 
   const loadMessages = useCallback(
     async (conversationId: string) => {
@@ -69,7 +75,7 @@ export function InboxPage() {
   );
 
   useEffect(() => {
-    loadConversations();
+    void loadConversations();
   }, [loadConversations]);
 
   useEffect(() => {
@@ -78,11 +84,8 @@ export function InboxPage() {
   }, [token]);
 
   useEffect(() => {
-    if (selectedId) {
-      loadMessages(selectedId);
-    } else {
-      setMessages([]);
-    }
+    if (selectedId) void loadMessages(selectedId);
+    else setMessages([]);
   }, [selectedId, loadMessages]);
 
   useEffect(() => {
@@ -99,22 +102,15 @@ export function InboxPage() {
     }
 
     const onNewMessage = (payload: { conversationId: string }) => {
-      if (payload.conversationId === selectedId) {
-        loadMessages(payload.conversationId);
-      }
-      loadConversations();
-    };
-
-    const onConversationUpdated = () => {
-      loadConversations();
+      if (payload.conversationId === selectedId) void loadMessages(payload.conversationId);
+      void loadConversations();
     };
 
     socket.on("message:new", onNewMessage);
-    socket.on("conversation:updated", onConversationUpdated);
+    socket.on("conversation:updated", () => void loadConversations());
 
     return () => {
       socket.off("message:new", onNewMessage);
-      socket.off("conversation:updated", onConversationUpdated);
       disconnectSocket();
     };
   }, [token, selectedId, loadMessages, loadConversations]);
@@ -155,15 +151,22 @@ export function InboxPage() {
     }
   }
 
-  async function handleSimulate() {
+  async function handleSimulate(channel: "WHATSAPP" | "INSTAGRAM") {
     if (!token) return;
     setSimulating(true);
     try {
-      await whatsappApi.demoInbound(token, {
-        phone: "5511999990001",
-        name: "Cliente Demo",
-        text: "Olá, gostaria de mais informações!",
-      });
+      if (channel === "INSTAGRAM") {
+        await instagramApi.demoInbound(token, {
+          username: "lead.instagram",
+          text: "Oi! Vi o perfil da GB Systems e quero saber dos planos 💜",
+        });
+      } else {
+        await whatsappApi.demoInbound(token, {
+          phone: "5511999990001",
+          name: "Cliente WhatsApp",
+          text: "Olá! Quero atendimento pelo WhatsApp.",
+        });
+      }
       await loadConversations();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao simular mensagem");
@@ -172,31 +175,32 @@ export function InboxPage() {
     }
   }
 
-  function applyQuickReply(content: string) {
-    setDraft(content);
-  }
-
   return (
     <div className="flex h-[calc(100vh-7rem)] flex-col lg:h-[calc(100vh-3rem)]">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-[var(--abs-blue-dark)]">Inbox</h1>
-          <p className="text-sm text-[var(--abs-muted)]">Atendimento em tempo real</p>
+          <h1 className="gb-display text-2xl font-semibold text-white">Inbox Omnichannel</h1>
+          <p className="text-sm text-[var(--gb-muted)]">WhatsApp + Instagram em tempo real</p>
         </div>
-        <div className="flex items-center gap-2">
-          <select
-            className={selectClass}
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-          >
+        <div className="flex flex-wrap items-center gap-2">
+          <select className={selectClass} value={channelFilter} onChange={(e) => setChannelFilter(e.target.value)}>
+            <option value="">Todos os canais</option>
+            <option value="WHATSAPP">WhatsApp</option>
+            <option value="INSTAGRAM">Instagram</option>
+          </select>
+          <select className={selectClass} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
             <option value="">Todos os status</option>
             <option value="open">Abertas</option>
             <option value="pending">Pendentes</option>
             <option value="closed">Fechadas</option>
           </select>
-          <button type="button" className={btnSecondary} onClick={handleSimulate} disabled={simulating}>
-            <FlaskConical className="mr-1.5 inline h-4 w-4" />
-            {simulating ? "Simulando..." : "Simular mensagem"}
+          <button type="button" className={btnSecondary} disabled={simulating} onClick={() => void handleSimulate("WHATSAPP")}>
+            <MessageCircle className="mr-1.5 inline h-4 w-4" />
+            Simular WA
+          </button>
+          <button type="button" className={btnSecondary} disabled={simulating} onClick={() => void handleSimulate("INSTAGRAM")}>
+            <Instagram className="mr-1.5 inline h-4 w-4" />
+            Simular IG
           </button>
         </div>
       </div>
@@ -204,16 +208,9 @@ export function InboxPage() {
       {error ? <div className="mb-3"><ErrorState message={error} /></div> : null}
 
       <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row">
-        {/* Conversation list */}
-        <div
-          className={`flex w-full flex-col rounded-xl border border-[var(--abs-gray)] bg-white lg:w-80 ${
-            selectedId ? "hidden lg:flex" : "flex"
-          }`}
-        >
-          <div className="border-b border-[var(--abs-gray)] px-4 py-3">
-            <p className="text-sm font-medium text-slate-600">
-              Conversas ({conversations.length})
-            </p>
+        <div className={`flex w-full flex-col gb-card lg:w-80 ${selectedId ? "hidden lg:flex" : "flex"}`}>
+          <div className="border-b border-[var(--gb-border)] px-4 py-3">
+            <p className="text-sm font-medium text-[var(--gb-muted)]">Conversas ({conversations.length})</p>
           </div>
           <div className="flex-1 overflow-y-auto">
             {loading ? (
@@ -226,30 +223,27 @@ export function InboxPage() {
                   key={conv.id}
                   type="button"
                   onClick={() => setSelectedId(conv.id)}
-                  className={`w-full border-b border-[var(--abs-gray)]/50 px-4 py-3 text-left transition hover:bg-[var(--abs-bg)]/50 ${
-                    selectedId === conv.id ? "bg-[var(--abs-yellow)]/20" : ""
+                  className={`w-full border-b border-[var(--gb-border)] px-4 py-3 text-left transition hover:bg-white/5 ${
+                    selectedId === conv.id ? "bg-white/10" : ""
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <p className="truncate font-medium text-[var(--abs-blue-dark)]">
-                      {conv.contact?.name ?? conv.contactId}
+                    <p className="truncate font-medium text-white">
+                      {conv.contact?.name ?? conv.contact?.username ?? "Contato"}
                     </p>
-                    <Badge variant={statusBadgeVariant(conv.status)}>
-                      {statusLabel(conv.status)}
-                    </Badge>
+                    <Badge variant={statusBadgeVariant(conv.status)}>{statusLabel(conv.status)}</Badge>
                   </div>
-                  <p className="mt-0.5 truncate text-xs text-[var(--abs-muted)]">
-                    {conv.contact?.phone}
-                  </p>
-                  {conv.lastMessage ? (
-                    <p className="mt-1 truncate text-sm text-[var(--abs-muted)]">{conv.lastMessage}</p>
-                  ) : null}
+                  <div className="mt-1 flex items-center gap-2">
+                    <span className={conv.channel === "INSTAGRAM" ? "gb-badge gb-badge-instagram" : "gb-badge gb-badge-whatsapp"}>
+                      {conv.channel === "INSTAGRAM" ? "Instagram" : "WhatsApp"}
+                    </span>
+                    <p className="truncate text-xs text-[var(--gb-muted)]">
+                      {conv.contact?.phone ?? (conv.contact?.username ? `@${conv.contact.username}` : "")}
+                    </p>
+                  </div>
                   {conv.lastMessageAt ? (
-                    <p className="mt-1 text-xs text-slate-600">
-                      {formatDistanceToNow(new Date(conv.lastMessageAt), {
-                        addSuffix: true,
-                        locale: ptBR,
-                      })}
+                    <p className="mt-1 text-xs text-slate-500">
+                      {formatDistanceToNow(new Date(conv.lastMessageAt), { addSuffix: true, locale: ptBR })}
                     </p>
                   ) : null}
                 </button>
@@ -258,37 +252,28 @@ export function InboxPage() {
           </div>
         </div>
 
-        {/* Chat thread */}
-        <div
-          className={`flex min-h-0 flex-1 flex-col rounded-xl border border-[var(--abs-gray)] bg-white ${
-            !selectedId ? "hidden lg:flex" : "flex"
-          }`}
-        >
+        <div className={`flex min-h-0 flex-1 flex-col gb-card ${!selectedId ? "hidden lg:flex" : "flex"}`}>
           {selected ? (
             <>
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--abs-gray)] px-4 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--gb-border)] px-4 py-3">
                 <div>
-                  <button
-                    type="button"
-                    className="mb-1 text-xs text-[var(--abs-blue)] lg:hidden"
-                    onClick={() => setSelectedId(null)}
-                  >
+                  <button type="button" className="mb-1 text-xs text-[var(--gb-cyan)] lg:hidden" onClick={() => setSelectedId(null)}>
                     ← Voltar
                   </button>
-                  <p className="font-medium text-[var(--abs-blue-dark)]">{selected.contact?.name ?? "Contato"}</p>
-                  <p className="text-xs text-[var(--abs-muted)]">{selected.contact?.phone}</p>
+                  <p className="font-medium text-white">{selected.contact?.name ?? selected.contact?.username ?? "Contato"}</p>
+                  <p className="text-xs text-[var(--gb-muted)]">
+                    {selected.channel === "INSTAGRAM"
+                      ? `@${selected.contact?.username ?? selected.contact?.instagramId ?? "instagram"}`
+                      : selected.contact?.phone}
+                  </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <select
-                    className={selectClass}
-                    value={selected.status}
-                    onChange={(e) => handleStatusChange(e.target.value)}
-                  >
+                  <select className={selectClass} value={selected.status} onChange={(e) => void handleStatusChange(e.target.value)}>
                     <option value="open">Aberta</option>
                     <option value="pending">Pendente</option>
                     <option value="closed">Fechada</option>
                   </select>
-                  <button type="button" className={btnSecondary} onClick={handleAssignSelf}>
+                  <button type="button" className={btnSecondary} onClick={() => void handleAssignSelf()}>
                     Atribuir a mim
                   </button>
                 </div>
@@ -302,23 +287,17 @@ export function InboxPage() {
                 ) : (
                   <div className="space-y-3">
                     {messages.map((msg) => (
-                      <div
-                        key={msg.id}
-                        className={`flex ${msg.direction === "outbound" ? "justify-end" : "justify-start"}`}
-                      >
+                      <div key={msg.id} className={`flex ${msg.direction === "outbound" ? "justify-end" : "justify-start"}`}>
                         <div
                           className={`max-w-[75%] rounded-2xl px-4 py-2 text-sm ${
                             msg.direction === "outbound"
-                              ? "bg-emerald-600 text-[var(--abs-blue-dark)]"
-                              : "bg-[var(--abs-bg)] text-[var(--abs-blue-dark)]"
+                              ? "gb-gradient text-white"
+                              : "bg-white/10 text-slate-100"
                           }`}
                         >
                           <p className="whitespace-pre-wrap">{msg.content}</p>
                           <p className="mt-1 text-xs opacity-60">
-                            {formatDistanceToNow(new Date(msg.createdAt), {
-                              addSuffix: true,
-                              locale: ptBR,
-                            })}
+                            {formatDistanceToNow(new Date(msg.createdAt), { addSuffix: true, locale: ptBR })}
                           </p>
                         </div>
                       </div>
@@ -328,37 +307,26 @@ export function InboxPage() {
                 )}
               </div>
 
-              <form onSubmit={handleSend} className="border-t border-[var(--abs-gray)] p-4">
-                <div className="mb-2 flex items-center gap-2">
-                  {quickReplies.length > 0 ? (
-                    <select
-                      className={selectClass}
-                      defaultValue=""
-                      onChange={(e) => {
-                        if (e.target.value) applyQuickReply(e.target.value);
-                        e.target.value = "";
-                      }}
-                    >
-                      <option value="">Respostas rápidas</option>
-                      {quickReplies.map((qr) => (
-                        <option key={qr.id} value={qr.content}>
-                          {qr.title}
-                        </option>
-                      ))}
-                    </select>
-                  ) : null}
+              {quickReplies.length > 0 ? (
+                <div className="flex gap-2 overflow-x-auto border-t border-[var(--gb-border)] px-4 py-2">
+                  {quickReplies.map((qr) => (
+                    <button key={qr.id} type="button" className={btnSecondary} onClick={() => setDraft(qr.content)}>
+                      {qr.title}
+                    </button>
+                  ))}
                 </div>
-                <div className="flex gap-2">
-                  <input
-                    className={inputClass}
-                    placeholder="Digite sua mensagem..."
-                    value={draft}
-                    onChange={(e) => setDraft(e.target.value)}
-                  />
-                  <button type="submit" className={btnPrimary} disabled={sending || !draft.trim()}>
-                    <Send className="h-4 w-4" />
-                  </button>
-                </div>
+              ) : null}
+
+              <form onSubmit={handleSend} className="flex gap-2 border-t border-[var(--gb-border)] p-4">
+                <input
+                  className={`${inputClass} flex-1`}
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  placeholder="Digite sua mensagem..."
+                />
+                <button type="submit" className={btnPrimary} disabled={sending || !draft.trim()}>
+                  <Send className="h-4 w-4" />
+                </button>
               </form>
             </>
           ) : (

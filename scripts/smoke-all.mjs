@@ -32,7 +32,7 @@ try {
 
   const login = await req("/auth/login", {
     method: "POST",
-    body: JSON.stringify({ email: "admin@absresolve.com", password: "admin123" }),
+    body: JSON.stringify({ email: "admin@demo.gbsystems.com.br", password: "admin123" }),
   });
   const token = login.accessToken;
   record("Auth", !!token, `user=${login.user?.email ?? "?"}`);

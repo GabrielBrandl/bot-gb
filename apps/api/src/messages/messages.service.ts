@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
+import { Channel } from "@bot-wpp/database";
 import { PrismaService } from "../prisma/prisma.service";
 import { RealtimeService } from "../realtime/realtime.service";
 import { EvolutionClient } from "../whatsapp/evolution.client";
@@ -30,6 +31,7 @@ export class MessagesService {
       include: {
         contact: true,
         instance: true,
+        instagramAccount: true,
       },
     });
 
@@ -37,17 +39,23 @@ export class MessagesService {
       throw new NotFoundException("Conversa não encontrada");
     }
 
-    const instance = conversation.instance;
-    const isDemoOrDisconnected =
-      !instance ||
-      instance.status === "disconnected" ||
-      instance.evolutionInstanceId.startsWith("demo-");
+    const channel = conversation.channel ?? Channel.WHATSAPP;
 
-    if (!isDemoOrDisconnected && instance) {
-      if (mediaUrl) {
-        await this.evolution.sendMedia(instance.evolutionInstanceId, conversation.contact.phone, mediaUrl, content);
-      } else {
-        await this.evolution.sendText(instance.evolutionInstanceId, conversation.contact.phone, content);
+    if (channel === Channel.WHATSAPP) {
+      const instance = conversation.instance;
+      const phone = conversation.contact.phone;
+      const isDemoOrDisconnected =
+        !instance ||
+        !phone ||
+        instance.status === "disconnected" ||
+        instance.evolutionInstanceId.startsWith("demo");
+
+      if (!isDemoOrDisconnected && instance && phone) {
+        if (mediaUrl) {
+          await this.evolution.sendMedia(instance.evolutionInstanceId, phone, mediaUrl, content);
+        } else {
+          await this.evolution.sendText(instance.evolutionInstanceId, phone, content);
+        }
       }
     }
 
@@ -59,6 +67,7 @@ export class MessagesService {
         type: mediaUrl ? "media" : "text",
         content,
         mediaUrl,
+        channel,
       },
     });
 
@@ -75,12 +84,14 @@ export class MessagesService {
         direction: message.direction,
         content: message.content,
         createdAt: message.createdAt.toISOString(),
+        channel,
       },
     });
 
     this.realtime.emitToTenant(tenantId, "conversation:updated", {
       id: conversationId,
       lastMessageAt: now.toISOString(),
+      channel,
     });
 
     return message;
