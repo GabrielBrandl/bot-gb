@@ -138,7 +138,7 @@ export class CampaignsService {
 
     for (const recipient of recipients) {
       const contact = contacts.find((c) => c.id === recipient.contactId);
-      if (!contact) continue;
+      if (!contact?.phone) continue;
 
       await this.campaignsQueue.add("send", {
         tenantId,

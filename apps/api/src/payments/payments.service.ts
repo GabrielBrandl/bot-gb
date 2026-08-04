@@ -80,8 +80,8 @@ export class PaymentsService {
     const description = data.description ?? "Pagamento GB Systems";
 
     const asaasPayment = await this.asaas.createCharge({
-      customerName: contact.name ?? contact.phone,
-      customerPhone: contact.phone,
+      customerName: contact.name ?? contact.phone ?? contact.username ?? "Cliente",
+      customerPhone: contact.phone ?? undefined,
       value: data.amount,
       description,
       billingType,

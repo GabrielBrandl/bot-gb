@@ -1,6 +1,6 @@
 export interface SegmentContact {
   id: string;
-  phone: string;
+  phone: string | null;
   tags: Array<{ id: string }>;
   kanbanCards: Array<{ stageId: string }>;
 }
@@ -10,7 +10,7 @@ export function resolveCampaignContactIds(
   tagIds?: string[],
   stageId?: string,
 ): string[] {
-  let filtered = contacts;
+  let filtered = contacts.filter((c) => Boolean(c.phone));
 
   if (tagIds && tagIds.length > 0) {
     filtered = filtered.filter((c) => c.tags.some((t) => tagIds.includes(t.id)));
