@@ -17,7 +17,13 @@ fi
 
 if [ "${RUN_SEED:-false}" = "true" ]; then
   echo "[api] Running database seed..."
-  pnpm --filter @bot-wpp/database seed || echo "[api] seed failed (continuing)"
+  cd /app/packages/database
+  if pnpm exec tsx prisma/seed.ts; then
+    echo "[api] seed completed"
+  else
+    echo "[api] seed FAILED — check bcryptjs/tsx and DATABASE_URL"
+  fi
+  cd /app/apps/api
 fi
 
 echo "[api] Starting NestJS..."
