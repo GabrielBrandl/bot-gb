@@ -1,0 +1,55 @@
+# Stack mínima para WhatsApp real (Evolution + Redis).
+# Usa o Postgres local em 5432 (já usado pelo bot-gb).
+# Uso (com Docker Desktop no ar):
+#   docker compose -f docker/docker-compose.evolution.yml up -d
+services:
+  redis-evolution:
+    image: redis:7-alpine
+    container_name: bot-gb-redis-evolution
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_evolution_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  evolution-api:
+    image: evoapicloud/evolution-api:v2.3.7
+    container_name: bot-gb-evolution
+    restart: unless-stopped
+    environment:
+      SERVER_URL: http://localhost:8080
+      AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY:-dev-evolution-key}
+      DATABASE_ENABLED: "true"
+      DATABASE_PROVIDER: postgresql
+      # Host machine Postgres (Windows): host.docker.internal
+      DATABASE_CONNECTION_URI: postgresql://postgres:postgres@host.docker.internal:5432/evolution?schema=public
+      DATABASE_CONNECTION_CLIENT_NAME: evolution_api
+      CACHE_REDIS_ENABLED: "true"
+      CACHE_REDIS_URI: redis://redis-evolution:6379
+      CACHE_REDIS_PREFIX_KEY: evolution
+      CACHE_LOCAL_ENABLED: "false"
+      QRCODE_LIMIT: 30
+      LOG_LEVEL: ERROR,WARN,INFO
+      WEBHOOK_GLOBAL_ENABLED: "false"
+      # Melhora estabilidade do pareamento (Baileys)
+      CONFIG_SESSION_PHONE_CLIENT: Chrome
+      CONFIG_SESSION_PHONE_NAME: Chrome
+      DEL_INSTANCE: "false"
+    ports:
+      - "8080:8080"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      redis-evolution:
+        condition: service_healthy
+    volumes:
+      - evolution_instances:/evolution/instances
+
+volumes:
+  redis_evolution_data:
+  evolution_instances:

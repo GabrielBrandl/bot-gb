@@ -1,7 +1,9 @@
 import { FormEvent, useEffect, useState } from "react";
-import { Plus, QrCode, RefreshCw, Trash2 } from "lucide-react";
+import { Hash, Moon, Plus, QrCode, RefreshCw, Sun, Trash2 } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { tenantsApi, usersApi, whatsappApi, instagramApi, plansApi } from "../lib/api";
+import { getSocket } from "../lib/socket";
+import { getStoredTheme, setTheme, type ThemeMode } from "../lib/theme";
 import type { TeamUser, Tenant, WhatsappInstance } from "../lib/types";
 import { Badge, statusBadgeVariant, statusLabel } from "../components/ui/Badge";
 import {
@@ -16,6 +18,43 @@ import {
 } from "../components/ui/PageHeader";
 
 type Tab = "whatsapp" | "instagram" | "equipe" | "marca" | "plano";
+type WaConnectMode = "qr" | "code";
+
+/** Normaliza para dígitos sem +. Respeita o número informado (não inventa o 9). */
+function toWhatsAppDigits(input: string): string | null {
+  let digits = input.replace(/\D/g, "");
+  if (!digits) return null;
+  if (digits.startsWith("00")) digits = digits.slice(2);
+  if (digits.startsWith("0")) digits = digits.slice(1);
+
+  if (digits.startsWith("55") && digits.length >= 12 && digits.length <= 15) {
+    return digits;
+  }
+  if (digits.length === 10 || digits.length === 11) {
+    return `55${digits}`;
+  }
+  if (digits.length >= 12 && digits.length <= 15) return digits;
+  return null;
+}
+
+function formatDisplayPhone(e164: string) {
+  const d = e164.replace(/\D/g, "");
+  // +55 (DDD) 9 XXXX-XXXX (13 dígitos)
+  if (d.startsWith("55") && d.length === 13 && d[4] === "9") {
+    return `+55 (${d.slice(2, 4)}) ${d.slice(4, 5)} ${d.slice(5, 9)}-${d.slice(9)}`;
+  }
+  // +55 (DDD) XXXX-XXXX (12 dígitos) — ex: +55 92 3305-1829
+  if (d.startsWith("55") && d.length === 12) {
+    return `+55 (${d.slice(2, 4)}) ${d.slice(4, 8)}-${d.slice(8)}`;
+  }
+  return d ? `+${d}` : "";
+}
+
+function formatPairingCode(code: string) {
+  const clean = code.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+  if (clean.length === 8) return `${clean.slice(0, 4)}-${clean.slice(4)}`;
+  return code;
+}
 
 export function SettingsPage() {
   const { token } = useAuth();
@@ -28,61 +67,137 @@ export function SettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [igName, setIgName] = useState("");
 
-  // WhatsApp
+  const [connectMode, setConnectMode] = useState<WaConnectMode>("qr");
   const [instanceName, setInstanceName] = useState("");
+  const [localPhone, setLocalPhone] = useState("");
   const [qrData, setQrData] = useState<{
     base64?: string | null;
     code?: string | null;
     pairingCode?: string | null;
     message?: string;
+    phone?: string | null;
   } | null>(null);
   const [qrInstanceId, setQrInstanceId] = useState<string | null>(null);
   const [qrLoading, setQrLoading] = useState(false);
 
-  // Marca
   const [logoUrl, setLogoUrl] = useState("");
   const [primaryColor, setPrimaryColor] = useState("#2F6BFF");
   const [savingBrand, setSavingBrand] = useState(false);
 
-  async function load() {
+  const [evolutionOnline, setEvolutionOnline] = useState<boolean | null>(null);
+  const [evolutionHint, setEvolutionHint] = useState("");
+  const [theme, setThemeMode] = useState<ThemeMode>(() => getStoredTheme());
+
+  async function load(opts?: { quiet?: boolean }) {
     if (!token) return;
-    setLoading(true);
+    if (!opts?.quiet) setLoading(true);
     try {
-      const [t, i, u, ig] = await Promise.all([
+      const [t, i, u, ig, evo] = await Promise.all([
         tenantsApi.me(token).catch(() => null),
         whatsappApi.listInstances(token).catch(() => []),
         usersApi.list(token).catch(() => []),
         instagramApi.listAccounts(token).catch(() => []),
+        whatsappApi.evolutionStatus(token).catch(() => null),
       ]);
       setTenant(t);
       setInstances(i);
       setUsers(u);
       setIgAccounts(ig);
+      if (evo) {
+        setEvolutionOnline(evo.online);
+        setEvolutionHint(evo.hint);
+      }
       if (t) {
         setLogoUrl(t.logoUrl ?? "/brand/gb-systems-logo.png");
         setPrimaryColor(t.primaryColor ?? t.brandColor ?? "#2F6BFF");
       }
-      setError(null);
+      if (!opts?.quiet) setError(null);
+
+      const connectedQr = i.find((inst) => inst.id === qrInstanceId && inst.status === "connected");
+      if (connectedQr) {
+        setQrData(null);
+        setQrInstanceId(null);
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao carregar configurações");
+      if (!opts?.quiet) {
+        setError(err instanceof Error ? err.message : "Erro ao carregar configurações");
+      }
     } finally {
-      setLoading(false);
+      if (!opts?.quiet) setLoading(false);
     }
   }
 
   useEffect(() => {
-    load();
+    void load();
   }, [token]);
+
+  // Atualiza status automaticamente enquanto houver instância "conectando".
+  useEffect(() => {
+    if (!token) return;
+    const connecting = instances.some(
+      (i) => i.status === "connecting" && !i.evolutionInstanceId?.startsWith("demo"),
+    );
+    if (!connecting) return;
+
+    const timer = window.setInterval(() => {
+      void (async () => {
+        const targets = instances.filter(
+          (i) => i.status === "connecting" && !i.evolutionInstanceId?.startsWith("demo"),
+        );
+        await Promise.all(
+          targets.map((inst) => whatsappApi.refresh(token, inst.id).catch(() => null)),
+        );
+        await load({ quiet: true });
+      })();
+    }, 4000);
+
+    return () => window.clearInterval(timer);
+  }, [token, instances.map((i) => `${i.id}:${i.status}`).join("|")]);
+
+  useEffect(() => {
+    if (!token) return;
+    const socket = getSocket(token);
+    const onStatus = (payload: { instanceId?: string; status?: string }) => {
+      if (!payload?.instanceId || !payload.status) return;
+      setInstances((prev) =>
+        prev.map((inst) =>
+          inst.id === payload.instanceId ? { ...inst, status: payload.status as WhatsappInstance["status"] } : inst,
+        ),
+      );
+      if (payload.instanceId === qrInstanceId && payload.status === "connected") {
+        setQrData(null);
+        setQrInstanceId(null);
+      }
+    };
+    socket.on("instance:status", onStatus);
+    return () => {
+      socket.off("instance:status", onStatus);
+    };
+  }, [token, qrInstanceId]);
 
   async function handleCreateInstance(e: FormEvent) {
     e.preventDefault();
     if (!token || !instanceName.trim()) return;
+
+    let phone: string | undefined;
+    if (connectMode === "code") {
+      const digits = toWhatsAppDigits(localPhone);
+      if (!digits) {
+        setError("Informe o número do WhatsApp com DDD (ex: 92999999999). O código do país é adicionado sozinho.");
+        return;
+      }
+      phone = digits;
+    }
+
     try {
       setError(null);
       setQrLoading(true);
-      const created = await whatsappApi.createInstance(token, instanceName.trim());
+      const created = await whatsappApi.createInstance(token, instanceName.trim(), phone);
       setInstanceName("");
       setQrInstanceId(created.id);
+      if (created.message) {
+        setError(created.message);
+      }
       const immediateQr = (created as WhatsappInstance & {
         qr?: { base64?: string | null; code?: string | null; pairingCode?: string | null };
       }).qr;
@@ -90,21 +205,50 @@ export function SettingsPage() {
         setQrData(immediateQr);
       }
       await load();
-      await handleShowQr(created.id);
+      if (created.evolutionOnline === false) {
+        setQrLoading(false);
+        return;
+      }
+      if (connectMode === "code" && phone) {
+        await handleShowPairing(created.id, phone);
+      } else {
+        await handleShowQr(created.id);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao criar instância");
       setQrLoading(false);
     }
   }
 
+  async function handleProvision(id: string) {
+    if (!token) return;
+    setQrLoading(true);
+    setError(null);
+    try {
+      const result = await whatsappApi.provision(token, id);
+      await load();
+      if (connectMode === "code") {
+        await handleShowPairing(id);
+      } else {
+        await handleShowQr(id);
+      }
+      if (!result.evolutionOnline) {
+        setError("Evolution ainda offline. Abra o Docker Desktop e rode scripts/start-evolution.ps1");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao conectar na Evolution");
+      setQrLoading(false);
+    }
+  }
+
   async function handleShowQr(id: string) {
     if (!token) return;
+    setConnectMode("qr");
     setQrLoading(true);
     setQrInstanceId(id);
     setError(null);
     try {
       let qr = await whatsappApi.getQr(token, id);
-      // One extra client-side retry — Evolution can lag a second after create/connect.
       if (!qr.base64 && !qr.code && !qr.pairingCode && !qr.message?.includes("demo")) {
         await new Promise((r) => setTimeout(r, 1200));
         qr = await whatsappApi.getQr(token, id);
@@ -113,9 +257,43 @@ export function SettingsPage() {
       if (!qr.base64 && !qr.code && !qr.pairingCode && qr.message) {
         setError(qr.message);
       }
+      await load({ quiet: true });
     } catch (err) {
       setQrData(null);
       setError(err instanceof Error ? err.message : "Erro ao obter QR Code");
+    } finally {
+      setQrLoading(false);
+    }
+  }
+
+  async function handleShowPairing(id: string, phoneOverride?: string) {
+    if (!token) return;
+    const digits = toWhatsAppDigits(phoneOverride ?? localPhone);
+    if (!digits) {
+      setConnectMode("code");
+      setQrInstanceId(id);
+      setError("Para gerar o código, informe o número do WhatsApp com DDD (ex: 92999999999).");
+      return;
+    }
+    setLocalPhone(digits.length === 13 && digits.startsWith("55") ? digits.slice(2) : digits);
+    setConnectMode("code");
+    setQrLoading(true);
+    setQrInstanceId(id);
+    setError(null);
+    try {
+      let result = await whatsappApi.getPairingCode(token, id, digits);
+      if (!result.pairingCode && !result.message?.includes("demo") && !result.message?.includes("conectado")) {
+        await new Promise((r) => setTimeout(r, 1500));
+        result = await whatsappApi.getPairingCode(token, id, digits);
+      }
+      setQrData(result);
+      if (!result.pairingCode && result.message) {
+        setError(result.message);
+      }
+      await load({ quiet: true });
+    } catch (err) {
+      setQrData(null);
+      setError(err instanceof Error ? err.message : "Erro ao obter código de pareamento");
     } finally {
       setQrLoading(false);
     }
@@ -224,12 +402,45 @@ export function SettingsPage() {
       {tab === "whatsapp" && (
         <div className="space-y-6">
           <Card>
-            <h2 className="mb-2 text-lg font-medium text-white">Instâncias WhatsApp</h2>
-            <ol className="mb-4 list-decimal space-y-1 pl-5 text-sm text-[var(--gb-muted)]">
-              <li>Crie uma nova instância (não use a demo para QR real).</li>
-              <li>Clique no ícone de QR e escaneie com o WhatsApp do celular.</li>
-              <li>Aguarde o status mudar para Conectado; use Atualizar se necessário.</li>
-            </ol>
+            <h2 className="mb-2 text-lg font-medium text-[var(--gb-text)]">Instâncias WhatsApp</h2>
+            <div
+              className={`mb-4 rounded-xl border px-4 py-3 text-sm ${
+                evolutionOnline
+                  ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
+                  : "border-amber-500/40 bg-amber-500/10 text-amber-100"
+              }`}
+            >
+              <p className="font-medium">
+                Evolution API: {evolutionOnline == null ? "verificando…" : evolutionOnline ? "Online" : "Offline"}
+              </p>
+              <p className="mt-1 text-xs opacity-90">
+                {evolutionHint ||
+                  "Para WhatsApp real, inicie o Docker Desktop e execute: scripts/start-evolution.ps1"}
+              </p>
+            </div>
+            <p className="mb-4 text-sm text-[var(--gb-muted)]">
+              Conecte como no WhatsApp Web (QR) ou, se não puder escanear, use o código de 8 dígitos no celular.
+            </p>
+
+            <div className="mb-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                className={connectMode === "qr" ? btnPrimary : btnSecondary}
+                onClick={() => setConnectMode("qr")}
+              >
+                <QrCode className="mr-1.5 inline h-4 w-4" />
+                Via QR Code
+              </button>
+              <button
+                type="button"
+                className={connectMode === "code" ? btnPrimary : btnSecondary}
+                onClick={() => setConnectMode("code")}
+              >
+                <Hash className="mr-1.5 inline h-4 w-4" />
+                Via código
+              </button>
+            </div>
+
             <form onSubmit={handleCreateInstance} className="mb-4 flex flex-wrap gap-2">
               <input
                 className={`${inputClass} max-w-xs`}
@@ -238,34 +449,57 @@ export function SettingsPage() {
                 onChange={(e) => setInstanceName(e.target.value)}
                 required
               />
+              {connectMode === "code" ? (
+                <input
+                  className={`${inputClass} max-w-xs`}
+                  placeholder="Seu WhatsApp com DDD (ex: 92999999999)"
+                  value={localPhone}
+                  onChange={(e) => setLocalPhone(e.target.value)}
+                  inputMode="tel"
+                  required
+                />
+              ) : null}
               <button type="submit" className={btnPrimary} disabled={qrLoading}>
                 <Plus className="mr-1.5 inline h-4 w-4" />
-                {qrLoading ? "Gerando QR..." : "Criar e gerar QR"}
+                {qrLoading
+                  ? connectMode === "code"
+                    ? "Gerando código…"
+                    : "Gerando QR…"
+                  : connectMode === "code"
+                    ? "Criar e gerar código"
+                    : "Conectar WhatsApp"}
               </button>
             </form>
-            <p className="mb-4 text-xs text-[var(--abs-muted)]">
-              A instância &quot;demo&quot; já vem conectada para testes internos. Para WhatsApp real, crie outra
-              instância com Evolution API no ar (Docker local ou EasyPanel).
-            </p>
+            {connectMode === "code" ? (
+              <p className="mb-4 text-xs text-[var(--gb-muted)]">
+                Use o número exatamente como no WhatsApp (ex: 559233051829 ou 9233051829). Digite o código no celular em até 1 minuto.
+              </p>
+            ) : (
+              <p className="mb-4 text-xs text-[var(--gb-muted)]">
+                A instância &quot;demo&quot; já vem conectada para testes. Para WhatsApp real, escaneie o QR.
+              </p>
+            )}
             {instances.length === 0 ? (
-              <p className="text-sm text-[var(--abs-muted)]">Nenhuma instância configurada.</p>
+              <p className="text-sm text-[var(--gb-muted)]">Nenhuma instância configurada.</p>
             ) : (
               <div className="space-y-3">
                 {instances.map((inst) => {
-                  const isDemo = String(inst.evolutionInstanceId || "").startsWith("demo-");
+                  const isDemo =
+                    inst.evolutionInstanceId === "demo" ||
+                    String(inst.evolutionInstanceId || "").startsWith("demo-");
                   return (
                     <div
                       key={inst.id}
-                      className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--abs-gray)] bg-white/50 p-4"
+                      className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--gb-border)] bg-[var(--gb-surface-2)]/50 p-4"
                     >
-                      <div>
-                        <p className="font-medium text-[var(--abs-blue-dark)]">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-[var(--gb-text)]">
                           {inst.name}
                           {isDemo ? (
-                            <span className="ml-2 text-xs font-normal text-[var(--abs-muted)]">(demo)</span>
+                            <span className="ml-2 text-xs font-normal text-[var(--gb-muted)]">(demo)</span>
                           ) : null}
                         </p>
-                        {inst.phone ? <p className="text-xs text-[var(--abs-muted)]">{inst.phone}</p> : null}
+                        {inst.phone ? <p className="text-xs text-[var(--gb-muted)]">{inst.phone}</p> : null}
                       </div>
                       <div className="flex items-center gap-2">
                         <Badge variant={statusBadgeVariant(inst.status)}>
@@ -275,15 +509,33 @@ export function SettingsPage() {
                           type="button"
                           className={btnSecondary}
                           title="Mostrar QR Code"
-                          onClick={() => handleShowQr(inst.id)}
+                          onClick={() => void handleShowQr(inst.id)}
                         >
                           <QrCode className="h-4 w-4" />
                         </button>
                         <button
                           type="button"
                           className={btnSecondary}
+                          title="Gerar código de pareamento"
+                          onClick={() => void handleShowPairing(inst.id, inst.phone ?? undefined)}
+                        >
+                          <Hash className="h-4 w-4" />
+                        </button>
+                        {inst.status === "disconnected" && !isDemo ? (
+                          <button
+                            type="button"
+                            className={btnPrimary}
+                            title="Conectar"
+                            onClick={() => void handleProvision(inst.id)}
+                          >
+                            Conectar
+                          </button>
+                        ) : null}
+                        <button
+                          type="button"
+                          className={btnSecondary}
                           title="Atualizar status"
-                          onClick={() => handleRefresh(inst.id)}
+                          onClick={() => void handleRefresh(inst.id)}
                         >
                           <RefreshCw className="h-4 w-4" />
                         </button>
@@ -291,7 +543,7 @@ export function SettingsPage() {
                           type="button"
                           className={btnDanger}
                           title="Remover"
-                          onClick={() => handleDelete(inst.id)}
+                          onClick={() => void handleDelete(inst.id)}
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
@@ -305,47 +557,88 @@ export function SettingsPage() {
 
           {qrLoading ? (
             <Card>
-              <p className="text-sm text-[var(--abs-muted)]">
-                Gerando QR Code via Evolution API… isso pode levar alguns segundos.
+              <p className="text-sm text-[var(--gb-muted)]">
+                {connectMode === "code"
+                  ? "Gerando código de pareamento…"
+                  : "Gerando QR Code…"}{" "}
+                isso pode levar alguns segundos.
               </p>
             </Card>
           ) : null}
 
           {qrData ? (
             <Card>
-              <h3 className="mb-2 font-medium text-[var(--abs-blue-dark)]">QR Code — escaneie no WhatsApp</h3>
-              <p className="mb-4 text-sm text-[var(--abs-muted)]">
-                No celular: WhatsApp → Aparelhos conectados → Conectar um aparelho.
-              </p>
-              {qrData.base64 ? (
-                <img
-                  src={qrData.base64.startsWith("data:") ? qrData.base64 : `data:image/png;base64,${qrData.base64}`}
-                  alt="QR Code WhatsApp"
-                  className="mx-auto max-w-[280px] rounded-lg border border-[var(--abs-gray)] bg-white p-3"
-                />
-              ) : null}
               {qrData.pairingCode ? (
-                <p className="mt-3 text-center text-sm text-[var(--abs-blue-dark)]">
-                  Código de pareamento: <span className="font-mono font-semibold">{qrData.pairingCode}</span>
-                </p>
-              ) : null}
-              {!qrData.base64 && qrData.code ? (
-                <pre className="mt-3 overflow-x-auto rounded-lg bg-white p-4 text-xs text-slate-600">
-                  {qrData.code}
-                </pre>
-              ) : null}
+                <>
+                  <h3 className="mb-2 font-medium text-[var(--gb-text)]">Código de pareamento</h3>
+                  <p className="mb-2 text-sm text-[var(--gb-muted)]">
+                    No celular: WhatsApp → Aparelhos conectados → Conectar um aparelho →{" "}
+                    <strong className="text-[var(--gb-text)]">Conectar com número de telefone</strong> → digite o código{" "}
+                    <strong className="text-[var(--gb-text)]">em até 1 minuto</strong>.
+                  </p>
+                  {qrData.phone || localPhone ? (
+                    <p className="mb-4 text-center text-sm text-[var(--gb-cyan)]">
+                      Número: {formatDisplayPhone(qrData.phone || toWhatsAppDigits(localPhone) || "")}
+                    </p>
+                  ) : null}
+                  <p className="gb-display my-6 text-center text-4xl font-bold tracking-[0.25em] text-[var(--gb-text)]">
+                    {formatPairingCode(qrData.pairingCode)}
+                  </p>
+                  <p className="text-center text-xs text-[var(--gb-muted)]">
+                    Se o WhatsApp disser que o código está errado, gere um novo e digite na hora — códigos antigos ou com número incompleto (sem o 9) falham.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <h3 className="mb-2 font-medium text-[var(--gb-text)]">QR Code — escaneie no WhatsApp</h3>
+                  <p className="mb-4 text-sm text-[var(--gb-muted)]">
+                    No celular: WhatsApp → Aparelhos conectados → Conectar um aparelho → aponte a câmera para o QR.
+                  </p>
+                  {qrData.base64 ? (
+                    <img
+                      src={qrData.base64.startsWith("data:") ? qrData.base64 : `data:image/png;base64,${qrData.base64}`}
+                      alt="QR Code WhatsApp"
+                      className="mx-auto max-w-[280px] rounded-lg border border-[var(--gb-border)] bg-white p-3"
+                    />
+                  ) : null}
+                  {!qrData.base64 && qrData.code ? (
+                    <pre className="mt-3 overflow-x-auto rounded-lg bg-[var(--gb-surface-2)] p-4 text-xs text-[var(--gb-muted)]">
+                      {qrData.code}
+                    </pre>
+                  ) : null}
+                </>
+              )}
               {!qrData.base64 && !qrData.code && !qrData.pairingCode ? (
-                <p className="text-sm text-[var(--abs-muted)]">
+                <p className="text-sm text-[var(--gb-muted)]">
                   {qrData.message ??
-                    "QR Code indisponível. Confirme que o container evolution-api está no ar e tente Atualizar QR."}
+                    "Conexão indisponível. Confirme que a Evolution API está no ar e tente novamente."}
                 </p>
               ) : null}
-              <div className="mt-4 flex flex-wrap gap-2">
+              <div className="mt-4 flex flex-wrap items-end gap-2">
                 {qrInstanceId ? (
-                  <button type="button" className={btnSecondary} onClick={() => handleShowQr(qrInstanceId)}>
-                    <RefreshCw className="mr-1.5 inline h-4 w-4" />
-                    Atualizar QR
-                  </button>
+                  <>
+                    <button type="button" className={btnSecondary} onClick={() => void handleShowQr(qrInstanceId)}>
+                      <RefreshCw className="mr-1.5 inline h-4 w-4" />
+                      Atualizar QR
+                    </button>
+                    <div className="flex min-w-[220px] flex-1 flex-wrap gap-2">
+                      <input
+                        className={`${inputClass} min-w-[160px] flex-1`}
+                        placeholder="WhatsApp c/ DDD p/ código"
+                        value={localPhone}
+                        onChange={(e) => setLocalPhone(e.target.value)}
+                        inputMode="tel"
+                      />
+                      <button
+                        type="button"
+                        className={btnSecondary}
+                        onClick={() => void handleShowPairing(qrInstanceId)}
+                      >
+                        <Hash className="mr-1.5 inline h-4 w-4" />
+                        Gerar código
+                      </button>
+                    </div>
+                  </>
                 ) : null}
                 <button
                   type="button"
@@ -471,36 +764,66 @@ export function SettingsPage() {
       )}
 
       {tab === "marca" && (
-        <Card>
-          <h2 className="mb-4 text-lg font-medium text-[var(--abs-blue-dark)]">Identidade visual</h2>
-          <form onSubmit={handleSaveBrand} className="grid max-w-md gap-4">
-            <label className="space-y-1">
-              <span className="text-sm text-[var(--abs-muted)]">URL do logo</span>
-              <input className={inputClass} value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)} />
-            </label>
-            <label className="space-y-1">
-              <span className="text-sm text-[var(--abs-muted)]">Cor da marca</span>
-              <div className="flex items-center gap-3">
-                <input
-                  type="color"
-                  value={primaryColor}
-                  onChange={(e) => setPrimaryColor(e.target.value)}
-                  className="h-10 w-14 cursor-pointer rounded border border-[var(--abs-gray)] bg-transparent"
-                />
-                <input className={inputClass} value={primaryColor} onChange={(e) => setPrimaryColor(e.target.value)} />
-              </div>
-            </label>
-            {logoUrl ? (
-              <div>
-                <span className="text-sm text-[var(--abs-muted)]">Prévia</span>
-                <img src={logoUrl} alt="Logo" className="mt-2 h-16 object-contain" />
-              </div>
-            ) : null}
-            <button type="submit" className={`${btnPrimary} w-fit`} disabled={savingBrand}>
-              {savingBrand ? "Salvando..." : "Salvar marca"}
-            </button>
-          </form>
-        </Card>
+        <div className="space-y-6">
+          <Card>
+            <h2 className="mb-4 text-lg font-medium text-[var(--gb-text)]">Aparência</h2>
+            <p className="mb-4 text-sm text-[var(--gb-muted)]">Escolha o tema do painel. A preferência fica salva neste navegador.</p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className={theme === "light" ? btnPrimary : btnSecondary}
+                onClick={() => {
+                  setTheme("light");
+                  setThemeMode("light");
+                }}
+              >
+                <Sun className="mr-1.5 inline h-4 w-4" />
+                Claro
+              </button>
+              <button
+                type="button"
+                className={theme === "dark" ? btnPrimary : btnSecondary}
+                onClick={() => {
+                  setTheme("dark");
+                  setThemeMode("dark");
+                }}
+              >
+                <Moon className="mr-1.5 inline h-4 w-4" />
+                Escuro
+              </button>
+            </div>
+          </Card>
+          <Card>
+            <h2 className="mb-4 text-lg font-medium text-[var(--gb-text)]">Identidade visual</h2>
+            <form onSubmit={handleSaveBrand} className="grid max-w-md gap-4">
+              <label className="space-y-1">
+                <span className="text-sm text-[var(--gb-muted)]">URL do logo</span>
+                <input className={inputClass} value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)} />
+              </label>
+              <label className="space-y-1">
+                <span className="text-sm text-[var(--gb-muted)]">Cor da marca</span>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="color"
+                    value={primaryColor}
+                    onChange={(e) => setPrimaryColor(e.target.value)}
+                    className="h-10 w-14 cursor-pointer rounded border border-[var(--gb-border)] bg-transparent"
+                  />
+                  <input className={inputClass} value={primaryColor} onChange={(e) => setPrimaryColor(e.target.value)} />
+                </div>
+              </label>
+              {logoUrl ? (
+                <div>
+                  <span className="text-sm text-[var(--gb-muted)]">Prévia</span>
+                  <img src={logoUrl} alt="Logo" className="mt-2 h-16 object-contain" />
+                </div>
+              ) : null}
+              <button type="submit" className={`${btnPrimary} w-fit`} disabled={savingBrand}>
+                {savingBrand ? "Salvando..." : "Salvar marca"}
+              </button>
+            </form>
+          </Card>
+        </div>
       )}
 
       {tab === "plano" && (

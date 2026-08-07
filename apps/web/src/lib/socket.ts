@@ -3,6 +3,10 @@ import { io, type Socket } from "socket.io-client";
 const STORAGE_KEY = "bot-wpp-auth";
 
 function getSocketUrl(): string {
+  const ws = (import.meta.env.VITE_WS_URL as string | undefined)?.trim();
+  if (ws) {
+    return ws.replace(/\/$/, "");
+  }
   const apiUrl = import.meta.env.VITE_API_URL ?? "http://localhost:3000/api";
   return apiUrl.replace(/\/api\/?$/, "");
 }

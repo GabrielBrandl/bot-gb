@@ -1,15 +1,69 @@
-# EasyPanel production stack (NO host ports, NO container_name).
-# Prefer this ROOT path in EasyPanel so createDotEnv writes .env next to compose:
-#   docker-compose.easypanel.yml
-# (Also available: docker/docker-compose.easypanel.yml — but .env may not load there.)
+# =============================================================================
+# EasyPanel — stack completa (api + web + worker + redis + postgres + evolution)
+# =============================================================================
+# No EasyPanel:
+#   1) Compose path: docker-compose.easypanel.yml  (raiz do repo)
+#   2) Cole as variáveis de .env.easypanel.example no Environment / createDotEnv
+#   3) Domínios públicos:
+#        web           → https://app.seudominio.com   (porta 80)
+#        api           → https://api.seudominio.com   (porta 3000)  ← WebSocket ON
+#        evolution-api → https://evo.seudominio.com   (porta 8080)
+#   4) Rebuild do serviço `web` após mudar VITE_* (são build args)
 #
-# Domains/ports are assigned by EasyPanel. Services talk by service name.
-# DB: Supabase (set DATABASE_URL + DIRECT_URL in EasyPanel env + createDotEnv).
+# Guia: docs/DEPLOY_EASYPANEL.md
+# =============================================================================
+
+x-api-env: &api-env
+  NODE_ENV: production
+  DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/bot_wpp?schema=public}
+  DIRECT_URL: ${DIRECT_URL:-postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/bot_wpp?schema=public}
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  API_PORT: "3000"
+  API_PREFIX: api
+  CORS_ORIGIN: ${CORS_ORIGIN}
+  PUBLIC_API_URL: ${PUBLIC_API_URL}
+  EVOLUTION_API_URL: http://evolution-api:8080
+  EVOLUTION_API_KEY: ${EVOLUTION_API_KEY}
+  EVOLUTION_WEBHOOK_URL: ${EVOLUTION_WEBHOOK_URL}
+  EVOLUTION_WEBHOOK_SECRET: ${EVOLUTION_WEBHOOK_SECRET}
+  JWT_SECRET: ${JWT_SECRET}
+  JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+  RUN_SEED: ${RUN_SEED:-true}
+  ASAAS_API_URL: ${ASAAS_API_URL:-https://api.asaas.com/api/v3}
+  ASAAS_API_KEY: ${ASAAS_API_KEY:-}
+  ASAAS_WEBHOOK_TOKEN: ${ASAAS_WEBHOOK_TOKEN:-}
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+  META_APP_ID: ${META_APP_ID:-}
+  META_APP_SECRET: ${META_APP_SECRET:-}
+  META_WEBHOOK_VERIFY_TOKEN: ${META_WEBHOOK_VERIFY_TOKEN:-}
+  META_PAGE_ACCESS_TOKEN: ${META_PAGE_ACCESS_TOKEN:-}
 
 services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-bot_wpp}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/init-evolution-db.sql:/docker-entrypoint-initdb.d/01-evolution.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-bot_wpp}"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+      start_period: 20s
+    expose:
+      - "5432"
+
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - redis_data:/data
     healthcheck:
@@ -24,11 +78,11 @@ services:
     image: evoapicloud/evolution-api:v2.3.7
     restart: unless-stopped
     environment:
-      SERVER_URL: ${EVOLUTION_SERVER_URL:-https://evo.SEUDOMINIO.com}
+      SERVER_URL: ${EVOLUTION_SERVER_URL}
       AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY}
-      DATABASE_ENABLED: ${EVOLUTION_DATABASE_ENABLED:-true}
+      DATABASE_ENABLED: "true"
       DATABASE_PROVIDER: postgresql
-      DATABASE_CONNECTION_URI: ${EVOLUTION_DATABASE_URI}
+      DATABASE_CONNECTION_URI: ${EVOLUTION_DATABASE_URI:-postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/evolution?schema=public}
       DATABASE_CONNECTION_CLIENT_NAME: evolution_api
       CACHE_REDIS_ENABLED: "true"
       CACHE_REDIS_URI: redis://redis:6379
@@ -36,11 +90,23 @@ services:
       CACHE_LOCAL_ENABLED: "false"
       QRCODE_LIMIT: 30
       LOG_LEVEL: ERROR,WARN,INFO
+      WEBHOOK_GLOBAL_ENABLED: "false"
+      CONFIG_SESSION_PHONE_CLIENT: Chrome
+      CONFIG_SESSION_PHONE_NAME: Chrome
+      DEL_INSTANCE: "false"
     volumes:
       - evolution_instances:/evolution/instances
     depends_on:
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
     expose:
       - "8080"
 
@@ -50,25 +116,20 @@ services:
       dockerfile: docker/Dockerfile.api
     restart: unless-stopped
     environment:
-      DATABASE_URL: ${DATABASE_URL}
-      DIRECT_URL: ${DIRECT_URL}
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      API_PORT: 3000
-      CORS_ORIGIN: ${CORS_ORIGIN:-https://app.SEUDOMINIO.com}
-      PUBLIC_API_URL: ${PUBLIC_API_URL:-https://api.SEUDOMINIO.com}
-      EVOLUTION_API_URL: http://evolution-api:8080
-      EVOLUTION_API_KEY: ${EVOLUTION_API_KEY}
-      EVOLUTION_WEBHOOK_URL: ${EVOLUTION_WEBHOOK_URL:-https://api.SEUDOMINIO.com/api/whatsapp/webhook}
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
-      ASAAS_API_URL: ${ASAAS_API_URL:-https://api.asaas.com/api/v3}
-      ASAAS_API_KEY: ${ASAAS_API_KEY:-}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      <<: *api-env
     depends_on:
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
+      evolution-api:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
     expose:
       - "3000"
 
@@ -78,49 +139,48 @@ services:
       dockerfile: docker/Dockerfile.worker
     restart: unless-stopped
     environment:
-      DATABASE_URL: ${DATABASE_URL}
-      DIRECT_URL: ${DIRECT_URL}
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/bot_wpp?schema=public}
+      DIRECT_URL: ${DIRECT_URL:-postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/bot_wpp?schema=public}
       REDIS_HOST: redis
-      REDIS_PORT: 6379
+      REDIS_PORT: "6379"
       EVOLUTION_API_URL: http://evolution-api:8080
       EVOLUTION_API_KEY: ${EVOLUTION_API_KEY}
     depends_on:
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
+      api:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('net').createConnection(6379,'redis').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
 
   web:
     build:
       context: .
       dockerfile: docker/Dockerfile.web
       args:
-        VITE_API_URL: ${VITE_API_URL:-https://api.SEUDOMINIO.com/api}
-        VITE_WS_URL: ${VITE_WS_URL:-https://api.SEUDOMINIO.com}
+        VITE_API_URL: ${VITE_API_URL}
+        VITE_WS_URL: ${VITE_WS_URL}
     restart: unless-stopped
     depends_on:
-      - api
+      api:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/healthz || exit 1"]
+      interval: 30s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
     expose:
       - "80"
 
-  postgres:
-    profiles: ["with-postgres"]
-    image: pgvector/pgvector:pg16
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB:-bot_wpp}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./docker/init-evolution-db.sql:/docker-entrypoint-initdb.d/01-evolution.sql:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d bot_wpp"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-    expose:
-      - "5432"
-
 volumes:
+  postgres_data:
   redis_data:
   evolution_instances:
-  postgres_data:

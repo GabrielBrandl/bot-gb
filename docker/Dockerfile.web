@@ -8,13 +8,15 @@ COPY packages ./packages
 COPY apps/web ./apps/web
 RUN pnpm install --frozen-lockfile=false
 # EasyPanel: set these as Build Arguments to your PUBLIC API URLs
-#   VITE_API_URL=https://api.SEUDOMINIO.com/api
-#   VITE_WS_URL=https://api.SEUDOMINIO.com
-ARG VITE_API_URL=http://localhost:3000/api
-ARG VITE_WS_URL=http://localhost:3000
+#   VITE_API_URL=https://api.seudominio.com/api
+#   VITE_WS_URL=https://api.seudominio.com
+# Do NOT ship with localhost defaults in production.
+ARG VITE_API_URL
+ARG VITE_WS_URL
 ENV VITE_API_URL=$VITE_API_URL
 ENV VITE_WS_URL=$VITE_WS_URL
-RUN pnpm --filter @bot-wpp/shared-types build \
+RUN if [ -z "$VITE_API_URL" ]; then echo "ERROR: VITE_API_URL build-arg is required"; exit 1; fi \
+ && pnpm --filter @bot-wpp/shared-types build \
  && pnpm --filter @bot-wpp/web build
 
 FROM nginx:1.27-alpine AS runner

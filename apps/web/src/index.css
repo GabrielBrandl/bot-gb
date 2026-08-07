@@ -33,6 +33,35 @@
   --abs-muted: var(--gb-muted);
   --abs-danger: var(--gb-danger);
   --abs-gradient: var(--gb-gradient);
+  --gb-sidebar: linear-gradient(180deg, #0d1424 0%, #070b16 100%);
+  --gb-card-bg: linear-gradient(180deg, rgba(24, 34, 56, 0.92), rgba(13, 20, 36, 0.95));
+  --gb-input-bg: rgba(7, 11, 22, 0.65);
+  --gb-nav-text: rgba(255, 255, 255, 0.8);
+  --gb-overlay: rgba(0, 0, 0, 0.6);
+  --gb-body-glow-1: rgba(47, 107, 255, 0.28);
+  --gb-body-glow-2: rgba(139, 92, 246, 0.22);
+}
+
+html.light {
+  --gb-bg: #f4f7fb;
+  --gb-bg-elevated: #ffffff;
+  --gb-surface: #ffffff;
+  --gb-surface-2: #eef2f8;
+  --gb-border: rgba(15, 23, 42, 0.1);
+  --gb-text: #0f172a;
+  --gb-muted: #64748b;
+  --gb-cyan: #2563eb;
+  --gb-glow: 0 0 28px rgba(47, 107, 255, 0.18);
+  --gb-gradient-soft: linear-gradient(135deg, rgba(47, 107, 255, 0.12), rgba(139, 92, 246, 0.1));
+  --gb-sidebar: linear-gradient(180deg, #ffffff 0%, #f1f5f9 100%);
+  --gb-card-bg: linear-gradient(180deg, #ffffff, #f8fafc);
+  --gb-input-bg: #ffffff;
+  --gb-nav-text: rgba(15, 23, 42, 0.72);
+  --gb-overlay: rgba(15, 23, 42, 0.35);
+  --gb-body-glow-1: rgba(47, 107, 255, 0.12);
+  --gb-body-glow-2: rgba(139, 92, 246, 0.1);
+  --abs-blue-dark: #1e3a8a;
+  --abs-white: #0f172a;
 }
 
 * {
@@ -50,10 +79,11 @@ body {
   font-family: "Outfit", ui-sans-serif, system-ui, sans-serif;
   color: var(--gb-text);
   background:
-    radial-gradient(ellipse 80% 50% at 10% -10%, rgba(47, 107, 255, 0.28), transparent 55%),
-    radial-gradient(ellipse 60% 40% at 90% 0%, rgba(139, 92, 246, 0.22), transparent 50%),
+    radial-gradient(ellipse 80% 50% at 10% -10%, var(--gb-body-glow-1), transparent 55%),
+    radial-gradient(ellipse 60% 40% at 90% 0%, var(--gb-body-glow-2), transparent 50%),
     var(--gb-bg);
   -webkit-font-smoothing: antialiased;
+  transition: background 0.25s ease, color 0.25s ease;
 }
 
 h1,
@@ -78,10 +108,15 @@ textarea {
 .abs-card,
 .gb-card {
   border: 1px solid var(--gb-border);
-  background: linear-gradient(180deg, rgba(24, 34, 56, 0.92), rgba(13, 20, 36, 0.95));
+  background: var(--gb-card-bg);
   border-radius: 1rem;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
   backdrop-filter: blur(12px);
+}
+
+html:not(.light) .abs-card,
+html:not(.light) .gb-card {
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
 }
 
 .abs-btn-primary,
@@ -114,7 +149,7 @@ textarea {
   width: 100%;
   border-radius: 0.75rem;
   border: 1px solid var(--gb-border);
-  background: rgba(7, 11, 22, 0.65);
+  background: var(--gb-input-bg);
   color: var(--gb-text);
   padding: 0.65rem 0.9rem;
   outline: none;

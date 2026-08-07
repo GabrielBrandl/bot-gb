@@ -183,9 +183,13 @@ export class PlansController {
     return this.platform.getPublicBySlug(slug);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles("ADMIN")
   @Post("plans/subscribe")
   async subscribe(@CurrentUser() user: AuthUser, @Body() dto: ChangePlanDto) {
+    if (user.impersonating) {
+      throw new BadRequestException("Não é possível alterar plano em sessão de acesso à empresa");
+    }
     const tenant = await this.plans.applyToTenant(user.tenantId, dto.planId);
     return {
       tenant,

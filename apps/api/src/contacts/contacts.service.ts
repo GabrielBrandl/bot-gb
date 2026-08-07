@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException, ConflictException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 
 @Injectable()
@@ -53,10 +53,14 @@ export class ContactsService {
     data: { name?: string; customFields?: Record<string, unknown> },
   ) {
     await this.getOne(tenantId, id);
+    const name = data.name !== undefined ? data.name.trim() : undefined;
+    if (data.name !== undefined && !name) {
+      throw new BadRequestException("Informe um nome válido");
+    }
     return this.prisma.contact.update({
       where: { id },
       data: {
-        ...(data.name !== undefined ? { name: data.name } : {}),
+        ...(name !== undefined ? { name } : {}),
         ...(data.customFields !== undefined
           ? { customFields: data.customFields as object }
           : {}),

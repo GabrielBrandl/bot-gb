@@ -22,10 +22,6 @@ class UpdateTenantDto {
   @IsString()
   @Matches(/^#[0-9A-Fa-f]{6}$/)
   primaryColor?: string;
-
-  @IsOptional()
-  @IsString()
-  plan?: string;
 }
 
 @Controller("tenants")

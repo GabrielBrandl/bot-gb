@@ -9,7 +9,9 @@ import {
   findMatchingFlow,
   getNextNode,
   getStartNode,
+  isWithinBusinessHours,
   parseFlowGraph,
+  type BusinessSchedule,
 } from "./flow-utils";
 import type { FlowNode } from "@bot-wpp/shared-types";
 
@@ -34,12 +36,54 @@ export class FlowExecutorService {
   ) {}
 
   async processInbound(ctx: InboundFlowContext): Promise<void> {
+    const conversation = await this.prisma.conversation.findFirst({
+      where: { id: ctx.conversationId, tenantId: ctx.tenantId },
+    });
+
+    // Se um atendente humano já assumiu, não interferir com a automação.
+    if (conversation?.assignedTo) {
+      return;
+    }
+
     const flows = await this.prisma.flow.findMany({
       where: { tenantId: ctx.tenantId, active: true },
     });
 
     const matched = findMatchingFlow(flows, ctx.text);
+    const hours = await this.prisma.businessHours.findUnique({
+      where: { tenantId: ctx.tenantId },
+    });
+
+    const open = isWithinBusinessHours(
+      (hours?.schedule as BusinessSchedule | null) ?? null,
+      hours?.timezone ?? "America/Manaus",
+    );
+
+    // Fora do horário: responde com a mensagem de ausência (qualquer mensagem).
+    if (!open) {
+      const away =
+        hours?.awayMessage?.trim() ||
+        "No momento estamos fora do horário de atendimento. Retornaremos assim que possível.";
+      await this.messages.sendText(ctx.tenantId, ctx.conversationId, away);
+      await this.conversations.setPendingUnassigned(ctx.tenantId, ctx.conversationId);
+      return;
+    }
+
     if (!matched) {
+      // Sem fluxo de palavra-chave: Bot Ti (agente IA ativo) responde.
+      const agent = await this.prisma.aIAgent.findFirst({
+        where: { tenantId: ctx.tenantId, active: true },
+        orderBy: { createdAt: "asc" },
+      });
+      if (agent) {
+        const reply = await this.ai.askAgent(ctx.tenantId, agent.id, {
+          question: ctx.text,
+          conversationId: ctx.conversationId,
+        });
+        if (reply.answer?.trim()) {
+          await this.messages.sendText(ctx.tenantId, ctx.conversationId, reply.answer.trim());
+        }
+      }
       return;
     }
 

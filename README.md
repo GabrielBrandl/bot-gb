@@ -56,3 +56,13 @@ META_PAGE_ACCESS_TOKEN=
 ```
 
 Webhook: `POST/GET /api/instagram/webhook`
+
+## Deploy EasyPanel
+
+Stack pronta (Postgres + Redis + Evolution + API + Worker + Web):
+
+1. Compose: **`docker-compose.easypanel.yml`**
+2. Env: copie **`.env.easypanel.example`** e troque domínios/senhas
+3. Guia completo: **[`docs/DEPLOY_EASYPANEL.md`](docs/DEPLOY_EASYPANEL.md)**
+
+Domínios sugeridos: `app.` (web), `api.` (API + WebSocket), `evo.` (Evolution).

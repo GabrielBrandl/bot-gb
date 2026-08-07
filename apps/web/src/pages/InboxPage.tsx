@@ -1,9 +1,10 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { FlaskConical, Instagram, MessageCircle, Send } from "lucide-react";
+import { FlaskConical, Instagram, MessageCircle, Pencil, Send } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import {
+  contactsApi,
   conversationsApi,
   instagramApi,
   messagesApi,
@@ -37,6 +38,9 @@ export function InboxPage() {
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [simulating, setSimulating] = useState(false);
+  const [editingContactName, setEditingContactName] = useState(false);
+  const [contactNameDraft, setContactNameDraft] = useState("");
+  const [savingContactName, setSavingContactName] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const selected = conversations.find((c) => c.id === selectedId) ?? null;
@@ -151,6 +155,37 @@ export function InboxPage() {
     }
   }
 
+  useEffect(() => {
+    setEditingContactName(false);
+    setContactNameDraft(selected?.contact?.name ?? "");
+  }, [selectedId, selected?.contact?.id, selected?.contact?.name]);
+
+  async function handleSaveContactName() {
+    if (!token || !selected?.contact?.id) return;
+    const next = contactNameDraft.trim();
+    if (!next) {
+      setError("Informe um nome para o contato.");
+      return;
+    }
+    setSavingContactName(true);
+    try {
+      const updated = await contactsApi.update(token, selected.contact.id, { name: next });
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.contactId === updated.id || c.contact?.id === updated.id
+            ? { ...c, contact: { ...c.contact, ...updated } }
+            : c,
+        ),
+      );
+      setEditingContactName(false);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao salvar nome do contato");
+    } finally {
+      setSavingContactName(false);
+    }
+  }
+
   async function handleSimulate(channel: "WHATSAPP" | "INSTAGRAM") {
     if (!token) return;
     setSimulating(true);
@@ -244,7 +279,7 @@ export function InboxPage() {
                   {conv.assignee?.name ? (
                     <p className="mt-1 truncate text-xs text-[var(--gb-cyan)]">Atendendo: {conv.assignee.name}</p>
                   ) : (
-                    <p className="mt-1 text-xs text-amber-400/80">Sem atendente</p>
+                    <p className="mt-1 truncate text-xs text-[var(--gb-cyan)]">Atendendo: Bot Ti</p>
                   )}
                   {conv.lastMessageAt ? (
                     <p className="mt-1 text-xs text-slate-500">
@@ -265,7 +300,54 @@ export function InboxPage() {
                   <button type="button" className="mb-1 text-xs text-[var(--gb-cyan)] lg:hidden" onClick={() => setSelectedId(null)}>
                     ← Voltar
                   </button>
-                  <p className="font-medium text-white">{selected.contact?.name ?? selected.contact?.username ?? "Contato"}</p>
+                  {editingContactName && selected.contact?.id ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <input
+                        className={`${inputClass} max-w-xs`}
+                        value={contactNameDraft}
+                        onChange={(e) => setContactNameDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            void handleSaveContactName();
+                          }
+                          if (e.key === "Escape") setEditingContactName(false);
+                        }}
+                        autoFocus
+                        disabled={savingContactName}
+                      />
+                      <button
+                        type="button"
+                        className={btnPrimary}
+                        disabled={savingContactName}
+                        onClick={() => void handleSaveContactName()}
+                      >
+                        Salvar
+                      </button>
+                      <button type="button" className={btnSecondary} onClick={() => setEditingContactName(false)}>
+                        Cancelar
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium text-white">
+                        {selected.contact?.name ?? selected.contact?.username ?? "Contato"}
+                      </p>
+                      {selected.contact?.id ? (
+                        <button
+                          type="button"
+                          className="rounded-lg p-1 text-[var(--gb-muted)] hover:bg-white/10 hover:text-[var(--gb-cyan)]"
+                          title="Editar nome do contato"
+                          onClick={() => {
+                            setContactNameDraft(selected.contact?.name ?? "");
+                            setEditingContactName(true);
+                          }}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                      ) : null}
+                    </div>
+                  )}
                   <p className="text-xs text-[var(--gb-muted)]">
                     {selected.channel === "INSTAGRAM"
                       ? `@${selected.contact?.username ?? selected.contact?.instagramId ?? "instagram"}`
@@ -274,7 +356,7 @@ export function InboxPage() {
                   <p className="mt-1 text-xs text-[var(--gb-cyan)]">
                     {selected.assignee?.name
                       ? `Atendendo: ${selected.assignee.name}`
-                      : "Ninguém atendendo ainda — ao enviar, a conversa fica com você"}
+                      : "Atendendo: Bot Ti"}
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -305,8 +387,10 @@ export function InboxPage() {
                               : "bg-white/10 text-slate-100"
                           }`}
                         >
-                          {msg.direction === "outbound" && msg.sentBy?.name ? (
-                            <p className="mb-1 text-[11px] font-semibold opacity-80">{msg.sentBy.name}</p>
+                          {msg.direction === "outbound" ? (
+                            <p className="mb-1 text-[11px] font-semibold opacity-80">
+                              {msg.sentBy?.name ?? "Bot Ti"}
+                            </p>
                           ) : null}
                           <p className="whitespace-pre-wrap">{msg.content}</p>
                           <p className="mt-1 text-xs opacity-60">

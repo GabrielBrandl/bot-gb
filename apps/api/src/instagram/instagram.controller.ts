@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Headers, Param, Post, Query, UseGuards } from "@nestjs/common";
 import { Public } from "../common/decorators/public.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
@@ -44,7 +44,10 @@ export class InstagramController {
     @Query("hub.verify_token") token: string,
     @Query("hub.challenge") challenge: string,
   ) {
-    const expected = process.env.META_WEBHOOK_VERIFY_TOKEN || "gb-systems-verify";
+    const expected = process.env.META_WEBHOOK_VERIFY_TOKEN?.trim();
+    if (!expected) {
+      return "forbidden";
+    }
     if (mode === "subscribe" && token === expected) {
       return challenge;
     }
@@ -53,7 +56,20 @@ export class InstagramController {
 
   @Public()
   @Post("webhook")
-  webhook(@Body() body: Record<string, unknown>) {
+  webhook(
+    @Headers("x-hub-signature-256") signature: string | undefined,
+    @Body() body: Record<string, unknown>,
+  ) {
+    const appSecret = process.env.META_APP_SECRET?.trim();
+    const isProd = Boolean(process.env.PUBLIC_API_URL?.trim()) || process.env.NODE_ENV === "production";
+    if (appSecret) {
+      // Sem corpo raw assinado no Nest padrão, exigimos pelo menos a presença do header Meta.
+      if (!signature?.startsWith("sha256=")) {
+        return { ok: false, error: "Assinatura Meta ausente" };
+      }
+    } else if (isProd) {
+      return { ok: false, error: "META_APP_SECRET não configurado" };
+    }
     return this.instagram.handleWebhook(body);
   }
 }

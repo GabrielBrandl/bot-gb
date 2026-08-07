@@ -10,6 +10,7 @@ import { JwtService } from "@nestjs/jwt";
 import { UserRole } from "@bot-wpp/database";
 import type { AuthResponse, AuthUser, BillingStatus, PlanCode } from "@bot-wpp/shared-types";
 import * as bcrypt from "bcryptjs";
+import { randomBytes } from "crypto";
 import { PrismaService } from "../prisma/prisma.service";
 import { slugify } from "../common/utils/slugify";
 import { PlansService } from "./plans.service";
@@ -393,7 +394,7 @@ export class PlatformAdminService {
   async createAccessLink(ownerId: string, tenantId: string) {
     await this.assertOwner(ownerId);
     const tenant = await this.getTenant(tenantId);
-    const code = `gb_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 12)}`;
+    const code = randomBytes(32).toString("base64url");
     accessCodes.set(code, {
       ownerId,
       tenantId: tenant.id,

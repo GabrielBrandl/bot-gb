@@ -7,10 +7,20 @@ import {
   WebSocketGateway,
   WebSocketServer,
 } from "@nestjs/websockets";
-import type { AuthUser } from "@bot-wpp/shared-types";
+import { UserRole } from "@bot-wpp/database";
 import { Server, Socket } from "socket.io";
+import { PrismaService } from "../prisma/prisma.service";
 
-@WebSocketGateway({ cors: { origin: "*" } })
+interface JwtPayload {
+  sub: string;
+  tenantId: string;
+  email?: string;
+  role?: string;
+  impersonating?: boolean;
+  homeTenantId?: string;
+}
+
+@WebSocketGateway({ cors: { origin: true } })
 @Injectable()
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private readonly logger = new Logger(ChatGateway.name);
@@ -21,6 +31,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   constructor(
     private readonly jwtService: JwtService,
     private readonly config: ConfigService,
+    private readonly prisma: PrismaService,
   ) {}
 
   async handleConnection(client: Socket): Promise<void> {
@@ -34,9 +45,40 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         return;
       }
 
-      const payload = await this.jwtService.verifyAsync<AuthUser>(token, {
-        secret: this.config.getOrThrow<string>("JWT_SECRET"),
+      const payload = await this.jwtService.verifyAsync<JwtPayload>(token, {
+        secret: process.env.JWT_SECRET || this.config.getOrThrow<string>("JWT_SECRET"),
       });
+
+      if (payload.impersonating) {
+        const owner = await this.prisma.user.findFirst({
+          where: { id: payload.sub, role: UserRole.PLATFORM_OWNER, active: true },
+        });
+        if (!owner) {
+          client.disconnect();
+          return;
+        }
+        const target = await this.prisma.tenant.findUnique({ where: { id: payload.tenantId } });
+        if (!target) {
+          client.disconnect();
+          return;
+        }
+      } else {
+        const user = await this.prisma.user.findFirst({
+          where: { id: payload.sub, tenantId: payload.tenantId, active: true },
+          include: { tenant: true },
+        });
+        if (!user) {
+          client.disconnect();
+          return;
+        }
+        if (
+          user.role !== UserRole.PLATFORM_OWNER &&
+          user.tenant.billingStatus === "suspended"
+        ) {
+          client.disconnect();
+          return;
+        }
+      }
 
       const room = `tenant:${payload.tenantId}`;
       await client.join(room);

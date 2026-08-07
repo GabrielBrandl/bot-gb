@@ -1,5 +1,6 @@
 import { PrismaClient, UserRole, Channel, PlanCode } from "@prisma/client";
 import * as bcrypt from "bcryptjs";
+import { seedTiEsbam } from "./seed-ti-esbam";
 
 const prisma = new PrismaClient();
 
@@ -396,11 +397,20 @@ async function main() {
     },
   });
 
+  const tiEsbam = await seedTiEsbam(prisma, passwordHash);
+
   console.log("Seed OK — GB Systems Omnichannel");
   console.log("Platform owner: admin@gbsystems.com.br / admin123");
   console.log("Tenant demo: admin@demo.gbsystems.com.br / admin123");
   console.log("(também: admin@demo.com / admin123)");
   console.log("Demo admin id:", demoAdmin.id);
+  console.log("---");
+  console.log("Cliente TI Esbam (UNIESBAM):", tiEsbam.portal);
+  console.log("Login equipe (senha admin123):");
+  for (const email of tiEsbam.users) {
+    console.log(`  - ${email}`);
+  }
+  console.log("Portal: http://localhost:5173/t/ti-esbam/login");
 }
 
 main()

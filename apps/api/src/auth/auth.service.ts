@@ -24,12 +24,13 @@ export class AuthService {
 
     const existing = await this.prisma.user.findUnique({ where: { email } });
     if (existing) {
-      throw new ConflictException("E-mail já cadastrado");
+      throw new ConflictException("Não foi possível concluir o cadastro com estes dados");
     }
 
     const slug = await this.ensureUniqueTenantSlug(slugify(dto.tenantName));
     const passwordHash = await bcrypt.hash(dto.password, 10);
-    const planId = dto.planId ?? "STARTER";
+    // Self-service sempre começa no STARTER (trial). Planos pagos só via Super Admin / billing.
+    const planId = "STARTER";
     const plan = await this.prisma.plan.findUnique({ where: { id: planId } });
     if (!plan) {
       throw new ConflictException("Plano inválido");

@@ -55,6 +55,20 @@ export class EvolutionClient {
     throw new ServiceUnavailableException(`Evolution API indisponível ao ${context}.`);
   }
 
+  async isAvailable(): Promise<boolean> {
+    try {
+      await this.http.get("/", { timeout: 3000, validateStatus: () => true });
+      return true;
+    } catch {
+      try {
+        await this.http.get("/instance/fetchInstances", { timeout: 3000, validateStatus: () => true });
+        return true;
+      } catch {
+        return false;
+      }
+    }
+  }
+
   normalizeQr(payload: unknown): EvolutionQrResponse {
     if (!payload || typeof payload !== "object") {
       return {};
@@ -77,13 +91,20 @@ export class EvolutionClient {
     return { base64, code, pairingCode };
   }
 
-  async createInstance(name: string): Promise<EvolutionCreateResult> {
+  async createInstance(name: string, phoneNumber?: string): Promise<EvolutionCreateResult> {
     try {
-      const { data } = await this.http.post<Record<string, unknown>>("/instance/create", {
+      const digits = phoneNumber?.replace(/\D/g, "");
+      const payload: Record<string, unknown> = {
         instanceName: name,
-        qrcode: true,
+        // Com número: pareamento. Sem número: QR (WhatsApp Web).
+        qrcode: !digits,
         integration: "WHATSAPP-BAILEYS",
-      });
+      };
+      if (digits) {
+        payload.number = digits;
+      }
+
+      const { data } = await this.http.post<Record<string, unknown>>("/instance/create", payload);
       const instance = data.instance as { instanceName?: string } | undefined;
       return {
         instanceName: instance?.instanceName ?? name,
@@ -98,18 +119,22 @@ export class EvolutionClient {
     }
   }
 
-  async getQrCode(instanceName: string): Promise<EvolutionQrResponse> {
+  async getQrCode(instanceName: string, phoneNumber?: string): Promise<EvolutionQrResponse> {
     const attempts = 4;
     let lastError: unknown;
+    const digits = phoneNumber?.replace(/\D/g, "");
+    const query = digits ? `?number=${encodeURIComponent(digits)}` : "";
 
     for (let attempt = 1; attempt <= attempts; attempt += 1) {
       try {
-        const { data } = await this.http.get<unknown>(`/instance/connect/${instanceName}`);
+        const { data } = await this.http.get<unknown>(`/instance/connect/${instanceName}${query}`);
         const qr = this.normalizeQr(data);
-        if (qr.base64 || qr.code || qr.pairingCode) {
+        if (digits) {
+          // Pairing mode: wait until Evolution returns the code (can lag a few tries).
+          if (qr.pairingCode) return qr;
+        } else if (qr.base64 || qr.code || qr.pairingCode) {
           return qr;
         }
-        // Evolution sometimes returns an empty payload while Baileys boots.
         if (attempt < attempts) {
           await new Promise((resolve) => setTimeout(resolve, 800 * attempt));
           continue;
@@ -124,7 +149,58 @@ export class EvolutionClient {
       }
     }
 
-    this.wrapError(lastError, "obter QR Code");
+    this.wrapError(lastError, digits ? "obter código de pareamento" : "obter QR Code");
+  }
+
+  /**
+   * Pareamento por código: força um connect limpo com o número.
+   * Códigos gerados em cima de sessão QR antiga costumam ser rejeitados pelo WhatsApp.
+   */
+  async getPairingCode(instanceName: string, phoneNumber: string): Promise<EvolutionQrResponse> {
+    const digits = phoneNumber.replace(/\D/g, "");
+    const attempts = 6;
+    let lastError: unknown;
+    let lastQr: EvolutionQrResponse = {};
+
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      try {
+        const { data } = await this.http.get<unknown>(
+          `/instance/connect/${instanceName}?number=${encodeURIComponent(digits)}`,
+        );
+        lastQr = this.normalizeQr(data);
+        if (lastQr.pairingCode) {
+          // Remove hífen/espaços — o app espera 8 chars alfanuméricos.
+          lastQr.pairingCode = lastQr.pairingCode.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+          return lastQr;
+        }
+        if (attempt < attempts) {
+          await new Promise((resolve) => setTimeout(resolve, 1000 * attempt));
+        }
+      } catch (error) {
+        lastError = error;
+        if (attempt < attempts) {
+          await new Promise((resolve) => setTimeout(resolve, 1000 * attempt));
+        }
+      }
+    }
+
+    if (lastQr.pairingCode || lastQr.base64 || lastQr.code) {
+      return lastQr;
+    }
+    this.wrapError(lastError, "obter código de pareamento");
+  }
+
+  async logout(instanceName: string): Promise<void> {
+    try {
+      await this.http.delete(`/instance/logout/${instanceName}`);
+    } catch (error) {
+      if (isAxiosError(error) && (error.response?.status === 404 || error.response?.status === 400)) {
+        return;
+      }
+      this.logger.warn(
+        `Logout ${instanceName}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 
   async getConnectionState(instanceName: string): Promise<EvolutionConnectionState> {
@@ -171,21 +247,37 @@ export class EvolutionClient {
     }
   }
 
-  async setWebhook(instanceName: string, url: string): Promise<unknown> {
+  async setWebhook(instanceName: string, url: string, secret?: string): Promise<unknown> {
     try {
+      const headers: Record<string, string> = {};
+      const webhookSecret = (secret || this.config.get<string>("EVOLUTION_WEBHOOK_SECRET") || "").trim();
+      if (webhookSecret) {
+        headers["x-webhook-secret"] = webhookSecret;
+        headers.apikey = webhookSecret;
+      }
+
       const { data } = await this.http.post(`/webhook/set/${instanceName}`, {
         webhook: {
           enabled: true,
           url,
           webhookByEvents: false,
           webhookBase64: false,
-          events: ["MESSAGES_UPSERT", "CONNECTION_UPDATE"],
+          ...(Object.keys(headers).length ? { headers } : {}),
+          events: ["MESSAGES_UPSERT", "CONNECTION_UPDATE", "QRCODE_UPDATED"],
         },
       });
       return data;
     } catch (error) {
       this.wrapError(error, "configurar webhook");
     }
+  }
+
+  /** Normaliza connectionStatus da Evolution (open/close/connecting). */
+  mapConnectionStatus(raw?: string | null): "connected" | "connecting" | "disconnected" {
+    const state = (raw || "").toLowerCase();
+    if (state === "open" || state === "connected") return "connected";
+    if (state === "connecting" || state === "qr" || state === "pairingsuccess") return "connecting";
+    return "disconnected";
   }
 
   async deleteInstance(instanceName: string): Promise<void> {

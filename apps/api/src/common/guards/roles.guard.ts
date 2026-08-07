@@ -18,6 +18,14 @@ export class RolesGuard implements CanActivate {
     }
 
     const request = context.switchToHttp().getRequest<{ user: AuthUser }>();
-    return requiredRoles.includes(request.user.role);
+    const user = request.user;
+    if (!user) return false;
+
+    // Sessão de acesso a empresa NÃO pode usar rotas de Super Admin.
+    if (user.impersonating && requiredRoles.includes("PLATFORM_OWNER")) {
+      return false;
+    }
+
+    return requiredRoles.includes(user.role);
   }
 }

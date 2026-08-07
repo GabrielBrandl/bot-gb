@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 
 @Injectable()
@@ -18,8 +18,19 @@ export class PlansService {
     return plan;
   }
 
-  async applyToTenant(tenantId: string, planId: string) {
+  /** Self-service: só STARTER/PRO em trial. ENTERPRISE e billing ativo = Super Admin. */
+  async applyToTenant(
+    tenantId: string,
+    planId: string,
+    options?: { fromPlatform?: boolean; activateBilling?: boolean },
+  ) {
     const plan = await this.get(planId);
+    if (!options?.fromPlatform && plan.code === "ENTERPRISE") {
+      throw new BadRequestException(
+        "Plano Enterprise só pode ser ativado pelo Super Admin GB Systems.",
+      );
+    }
+
     return this.prisma.tenant.update({
       where: { id: tenantId },
       data: {
@@ -29,7 +40,7 @@ export class PlansService {
         maxInstances: plan.maxWhatsapp,
         maxInstagram: plan.maxInstagram,
         maxContacts: plan.maxContacts,
-        billingStatus: "active",
+        billingStatus: options?.activateBilling || options?.fromPlatform ? "active" : "trialing",
       },
       include: { planRef: true },
     });

@@ -15,6 +15,11 @@ if ! pnpm exec prisma migrate deploy; then
   pnpm exec prisma migrate deploy
 fi
 
+if [ "${RUN_SEED:-false}" = "true" ]; then
+  echo "[api] Running database seed..."
+  pnpm --filter @bot-wpp/database seed || echo "[api] seed failed (continuing)"
+fi
+
 echo "[api] Starting NestJS..."
 cd /app/apps/api
 exec node dist/main.js

@@ -6,6 +6,9 @@ import { EvolutionClient } from "../whatsapp/evolution.client";
 
 export type MessageAgent = { id: string; name: string };
 
+/** Nome exibido enquanto chatbot/IA atende (antes de um humano assumir). */
+export const BOT_DISPLAY_NAME = "Bot Ti";
+
 /** Prefixa o nome do atendente para o cliente ver no WhatsApp/Instagram. */
 export function withAgentSignature(agentName: string, content: string): string {
   const name = agentName.trim();
@@ -58,7 +61,9 @@ export class MessagesService {
     }
 
     const channel = conversation.channel ?? Channel.WHATSAPP;
-    const outboundContent = agent?.name ? withAgentSignature(agent.name, content) : content;
+    // Humano: nome do atendente. Bot/IA (sem agent): "Bot Ti".
+    const signatureName = agent?.name?.trim() || BOT_DISPLAY_NAME;
+    const outboundContent = withAgentSignature(signatureName, content);
 
     if (channel === Channel.WHATSAPP) {
       const instance = conversation.instance;
@@ -85,7 +90,7 @@ export class MessagesService {
         direction: "outbound",
         type: mediaUrl ? "media" : "text",
         // Guarda o texto digitado; o prefixo com nome vai só no WhatsApp do cliente.
-        content: agent?.name ? content : outboundContent,
+        content,
         mediaUrl,
         channel,
         sentByUserId: agent?.id ?? null,

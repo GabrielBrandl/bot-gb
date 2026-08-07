@@ -26,11 +26,23 @@ import { apiRequest } from "./api-base";
 export const whatsappApi = {
   listInstances: (token: string) =>
     apiRequest<WhatsappInstance[]>("/whatsapp/instances", {}, token),
-  createInstance: (token: string, name: string) =>
-    apiRequest<WhatsappInstance>("/whatsapp/instances", {
-      method: "POST",
-      body: JSON.stringify({ name }),
-    }, token),
+  createInstance: (token: string, name: string, phone?: string) =>
+    apiRequest<WhatsappInstance & { message?: string; evolutionOnline?: boolean; qr?: unknown }>(
+      "/whatsapp/instances",
+      {
+        method: "POST",
+        body: JSON.stringify({ name, ...(phone ? { phone } : {}) }),
+      },
+      token,
+    ),
+  provision: (token: string, id: string) =>
+    apiRequest<WhatsappInstance & { qr?: unknown; evolutionOnline?: boolean }>(
+      `/whatsapp/instances/${id}/provision`,
+      { method: "POST" },
+      token,
+    ),
+  evolutionStatus: (token: string) =>
+    apiRequest<{ online: boolean; url: string; hint: string }>("/whatsapp/evolution/status", {}, token),
   getQr: (token: string, id: string) =>
     apiRequest<{
       base64?: string | null;
@@ -38,6 +50,17 @@ export const whatsappApi = {
       pairingCode?: string | null;
       message?: string;
     }>(`/whatsapp/instances/${id}/qr`, {}, token),
+  getPairingCode: (token: string, id: string, phone?: string) =>
+    apiRequest<{
+      base64?: string | null;
+      code?: string | null;
+      pairingCode?: string | null;
+      message?: string;
+      phone?: string | null;
+    }>(`/whatsapp/instances/${id}/pairing`, {
+      method: "POST",
+      body: JSON.stringify(phone ? { phone } : {}),
+    }, token),
   refresh: (token: string, id: string) =>
     apiRequest<WhatsappInstance>(`/whatsapp/instances/${id}/refresh`, { method: "POST" }, token),
   delete: (token: string, id: string) =>

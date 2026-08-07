@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { BullModule } from "@nestjs/bullmq";
+import { join } from "path";
 import { AuthModule } from "./auth/auth.module";
 import { HealthModule } from "./health/health.module";
 import { PrismaModule } from "./prisma/prisma.module";
@@ -27,7 +28,14 @@ import { PlansModule } from "./plans/plans.module";
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: ["../../.env", ".env"],
+      envFilePath: [
+        join(process.cwd(), ".env"),
+        join(process.cwd(), "apps", "api", ".env"),
+        join(__dirname, "..", "..", "..", ".env"),
+        join(__dirname, "..", ".env"),
+        "../../.env",
+        ".env",
+      ],
     }),
     BullModule.forRootAsync({
       imports: [ConfigModule],
