@@ -8,6 +8,12 @@ import type {
   WhatsappInstanceStatus,
 } from "@bot-wpp/shared-types";
 
+export interface Tag {
+  id: string;
+  name: string;
+  color?: string | null;
+}
+
 export interface Contact {
   id: string;
   name?: string | null;
