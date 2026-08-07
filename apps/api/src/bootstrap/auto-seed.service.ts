@@ -19,17 +19,22 @@ export class AutoSeedService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
-    const enabled = (this.config.get<string>("RUN_SEED") ?? process.env.RUN_SEED ?? "false")
-      .toString()
-      .toLowerCase();
-    if (enabled !== "true" && enabled !== "1") return;
-
     try {
       const users = await this.prisma.user.count();
       if (users > 0) {
         this.logger.log(`Seed skipped — already have ${users} user(s)`);
         return;
       }
+
+      const enabled = (this.config.get<string>("RUN_SEED") ?? process.env.RUN_SEED ?? "true")
+        .toString()
+        .trim()
+        .toLowerCase();
+      if (enabled === "false" || enabled === "0" || enabled === "no") {
+        this.logger.warn("Database empty but RUN_SEED disabled");
+        return;
+      }
+
       this.logger.warn("Database empty — running inline production seed…");
       await this.seedMinimal();
       this.logger.log("Inline seed completed");
