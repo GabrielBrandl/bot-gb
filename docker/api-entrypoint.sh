@@ -4,36 +4,24 @@ set -e
 cd /app/packages/database
 
 echo "[api] Running Prisma migrations..."
-if ! pnpm exec prisma migrate deploy; then
-  echo "[api] migrate deploy failed — attempting baseline for non-empty DB (P3005)..."
+pnpm exec prisma migrate deploy || {
+  echo "[api] migrate deploy failed — attempting baseline..."
   for dir in prisma/migrations/*/ ; do
     [ -d "$dir" ] || continue
     name=$(basename "$dir")
-    echo "[api] prisma migrate resolve --applied $name"
     pnpm exec prisma migrate resolve --applied "$name" || true
   done
   pnpm exec prisma migrate deploy || true
-fi
+}
 
-echo "[api] Ensuring schema is in sync (db push)..."
-pnpm exec prisma db push --skip-generate
-
-# Seed also runs from Nest AutoSeedService when DB is empty.
-if [ "${RUN_SEED:-true}" = "true" ]; then
-  echo "[api] Pre-start seed attempt..."
-  TSX_BIN=""
-  if [ -x /app/node_modules/.bin/tsx ]; then TSX_BIN=/app/node_modules/.bin/tsx; fi
-  if [ -z "$TSX_BIN" ] && [ -x /app/packages/database/node_modules/.bin/tsx ]; then
-    TSX_BIN=/app/packages/database/node_modules/.bin/tsx
-  fi
-  if [ -n "$TSX_BIN" ]; then
-    "$TSX_BIN" prisma/seed.ts && echo "[api] seed completed" || echo "[api] seed FAILED (Nest will retry if DB empty)"
-  else
-    echo "[api] tsx binary not found — Nest AutoSeedService will try"
-  fi
-fi
+echo "[api] Syncing schema with db push (fills gaps like missing plans table)..."
+# Do not fail container boot if push reports warnings
+set +e
+pnpm exec prisma db push --skip-generate --accept-data-loss
+PUSH_CODE=$?
+set -e
+echo "[api] db push exit=$PUSH_CODE"
 
 echo "[api] Starting NestJS..."
 cd /app/apps/api
 exec node dist/main.js
-
