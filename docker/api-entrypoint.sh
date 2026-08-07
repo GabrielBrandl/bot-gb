@@ -12,11 +12,14 @@ if ! pnpm exec prisma migrate deploy; then
     echo "[api] prisma migrate resolve --applied $name"
     pnpm exec prisma migrate resolve --applied "$name" || true
   done
-  pnpm exec prisma migrate deploy
+  pnpm exec prisma migrate deploy || true
 fi
 
-# Seed also runs from Nest AutoSeedService when RUN_SEED=true and DB is empty.
-if [ "${RUN_SEED:-false}" = "true" ]; then
+echo "[api] Ensuring schema is in sync (db push)..."
+pnpm exec prisma db push --skip-generate
+
+# Seed also runs from Nest AutoSeedService when DB is empty.
+if [ "${RUN_SEED:-true}" = "true" ]; then
   echo "[api] Pre-start seed attempt..."
   TSX_BIN=""
   if [ -x /app/node_modules/.bin/tsx ]; then TSX_BIN=/app/node_modules/.bin/tsx; fi
@@ -33,3 +36,4 @@ fi
 echo "[api] Starting NestJS..."
 cd /app/apps/api
 exec node dist/main.js
+
