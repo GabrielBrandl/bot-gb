@@ -15,15 +15,19 @@ if ! pnpm exec prisma migrate deploy; then
   pnpm exec prisma migrate deploy
 fi
 
+# Seed also runs from Nest AutoSeedService when RUN_SEED=true and DB is empty.
 if [ "${RUN_SEED:-false}" = "true" ]; then
-  echo "[api] Running database seed..."
-  cd /app/packages/database
-  if pnpm exec tsx prisma/seed.ts; then
-    echo "[api] seed completed"
-  else
-    echo "[api] seed FAILED — check bcryptjs/tsx and DATABASE_URL"
+  echo "[api] Pre-start seed attempt..."
+  TSX_BIN=""
+  if [ -x /app/node_modules/.bin/tsx ]; then TSX_BIN=/app/node_modules/.bin/tsx; fi
+  if [ -z "$TSX_BIN" ] && [ -x /app/packages/database/node_modules/.bin/tsx ]; then
+    TSX_BIN=/app/packages/database/node_modules/.bin/tsx
   fi
-  cd /app/apps/api
+  if [ -n "$TSX_BIN" ]; then
+    "$TSX_BIN" prisma/seed.ts && echo "[api] seed completed" || echo "[api] seed FAILED (Nest will retry if DB empty)"
+  else
+    echo "[api] tsx binary not found — Nest AutoSeedService will try"
+  fi
 fi
 
 echo "[api] Starting NestJS..."

@@ -23,6 +23,7 @@ import { ReportsModule } from "./reports/reports.module";
 import { AuditModule } from "./audit/audit.module";
 import { InstagramModule } from "./instagram/instagram.module";
 import { PlansModule } from "./plans/plans.module";
+import { AutoSeedService } from "./bootstrap/auto-seed.service";
 
 @Module({
   imports: [
@@ -69,5 +70,6 @@ import { PlansModule } from "./plans/plans.module";
     PaymentsModule,
     ReportsModule,
   ],
+  providers: [AutoSeedService],
 })
 export class AppModule {}
