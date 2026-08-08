@@ -214,8 +214,8 @@ export function InboxPage() {
     <div className="flex h-[calc(100vh-7rem)] flex-col lg:h-[calc(100vh-3rem)]">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="gb-display text-2xl font-semibold text-white">Inbox Omnichannel</h1>
-          <p className="text-sm text-[var(--gb-muted)]">WhatsApp + Instagram em tempo real</p>
+          <h1 className="gb-display text-2xl font-semibold text-[var(--gb-text)]">GB Systems</h1>
+          <p className="text-sm text-[var(--gb-muted)]">Central de atendimento</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <select className={selectClass} value={channelFilter} onChange={(e) => setChannelFilter(e.target.value)}>
@@ -258,12 +258,12 @@ export function InboxPage() {
                   key={conv.id}
                   type="button"
                   onClick={() => setSelectedId(conv.id)}
-                  className={`w-full border-b border-[var(--gb-border)] px-4 py-3 text-left transition hover:bg-white/5 ${
-                    selectedId === conv.id ? "bg-white/10" : ""
+                  className={`w-full border-b border-[var(--gb-border)] px-4 py-3 text-left transition hover:bg-[var(--gb-surface-2)] ${
+                    selectedId === conv.id ? "bg-[var(--gb-surface-2)]" : ""
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <p className="truncate font-medium text-white">
+                    <p className="truncate font-medium text-[var(--gb-text)]">
                       {conv.contact?.name ?? conv.contact?.username ?? "Contato"}
                     </p>
                     <Badge variant={statusBadgeVariant(conv.status)}>{statusLabel(conv.status)}</Badge>
@@ -282,7 +282,7 @@ export function InboxPage() {
                     <p className="mt-1 truncate text-xs text-[var(--gb-cyan)]">Atendendo: Assistente virtual</p>
                   )}
                   {conv.lastMessageAt ? (
-                    <p className="mt-1 text-xs text-slate-500">
+                    <p className="mt-1 text-xs text-[var(--gb-muted)]">
                       {formatDistanceToNow(new Date(conv.lastMessageAt), { addSuffix: true, locale: ptBR })}
                     </p>
                   ) : null}
@@ -330,13 +330,13 @@ export function InboxPage() {
                     </div>
                   ) : (
                     <div className="flex items-center gap-2">
-                      <p className="font-medium text-white">
+                      <p className="font-medium text-[var(--gb-text)]">
                         {selected.contact?.name ?? selected.contact?.username ?? "Contato"}
                       </p>
                       {selected.contact?.id ? (
                         <button
                           type="button"
-                          className="rounded-lg p-1 text-[var(--gb-muted)] hover:bg-white/10 hover:text-[var(--gb-cyan)]"
+                          className="rounded-lg p-1 text-[var(--gb-muted)] hover:bg-[var(--gb-surface-2)] hover:text-[var(--gb-cyan)]"
                           title="Editar nome do contato"
                           onClick={() => {
                             setContactNameDraft(selected.contact?.name ?? "");
@@ -384,7 +384,7 @@ export function InboxPage() {
                           className={`max-w-[75%] rounded-2xl px-4 py-2 text-sm ${
                             msg.direction === "outbound"
                               ? "gb-gradient text-white"
-                              : "bg-white/10 text-slate-100"
+                              : "border border-[var(--gb-border)] bg-[var(--gb-surface-2)] text-[var(--gb-text)]"
                           }`}
                         >
                           {msg.direction === "outbound" ? (
