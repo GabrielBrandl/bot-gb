@@ -1,7 +1,7 @@
 import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
 import { Smile, Send, Zap } from "lucide-react";
 import type { QuickReply } from "../../lib/types";
-import { btnPrimary, btnSecondary } from "../ui/PageHeader";
+import { btnPrimary } from "../ui/PageHeader";
 
 const EMOJI_GROUPS: Array<{ label: string; emojis: string[] }> = [
   {
@@ -94,48 +94,33 @@ export function MessageComposer({
     }
   }
 
+  /** Só preenche o rascunho — nunca envia. O atendente completa [email]/[status] etc. */
   function applyQuickReply(qr: QuickReply) {
     onDraftChange(qr.content);
     setQuickOpen(false);
-    requestAnimationFrame(() => textareaRef.current?.focus());
+    setEmojiOpen(false);
+    requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (!el) return;
+      el.focus();
+      // Posiciona no primeiro placeholder, se existir
+      const match = /\[email\]|\[status\]|\[data\]|_\[anexar print\]_/.exec(qr.content);
+      if (match && match.index != null) {
+        el.setSelectionRange(match.index, match.index + match[0].length);
+      } else {
+        const end = qr.content.length;
+        el.setSelectionRange(end, end);
+      }
+    });
   }
 
   return (
     <div className="border-t border-[var(--gb-border)] bg-[var(--gb-surface)]/80">
-      {quickReplies.length > 0 ? (
-        <div className="flex gap-2 overflow-x-auto px-4 pt-3">
-          {quickReplies.slice(0, 8).map((qr) => (
-            <button
-              key={qr.id}
-              type="button"
-              className={`${btnSecondary} shrink-0 whitespace-nowrap !px-2.5 !py-1 text-xs`}
-              title={qr.shortcut}
-              onClick={() => applyQuickReply(qr)}
-            >
-              {qr.title}
-            </button>
-          ))}
-          {quickReplies.length > 8 ? (
-            <button
-              type="button"
-              data-composer-toggle
-              className={`${btnSecondary} shrink-0 !px-2.5 !py-1 text-xs`}
-              onClick={() => {
-                setQuickOpen((v) => !v);
-                setEmojiOpen(false);
-              }}
-            >
-              +{quickReplies.length - 8} mais
-            </button>
-          ) : null}
-        </div>
-      ) : null}
-
       <form onSubmit={(e) => void handleSubmit(e)} className="relative p-3 sm:p-4">
         {(emojiOpen || quickOpen) && (
           <div
             ref={emojiPanelRef}
-            className="absolute bottom-[calc(100%-0.5rem)] left-3 right-3 z-20 max-h-64 overflow-y-auto rounded-xl border border-[var(--gb-border)] bg-[var(--gb-bg-elevated)] p-3 shadow-xl sm:left-4 sm:right-auto sm:w-[360px]"
+            className="absolute bottom-[calc(100%-0.5rem)] left-3 right-3 z-20 max-h-72 overflow-y-auto rounded-xl border border-[var(--gb-border)] bg-[var(--gb-bg-elevated)] p-3 shadow-xl sm:left-4 sm:right-auto sm:w-[400px]"
           >
             {emojiOpen ? (
               <div className="space-y-3">
@@ -161,9 +146,14 @@ export function MessageComposer({
               </div>
             ) : (
               <div className="space-y-1">
-                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--gb-muted)]">
-                  Mensagens rápidas
-                </p>
+                <div className="mb-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--gb-muted)]">
+                    Mensagens rápidas
+                  </p>
+                  <p className="mt-0.5 text-xs text-[var(--gb-muted)]">
+                    Ao clicar, o texto vai para o campo — edite e depois envie.
+                  </p>
+                </div>
                 {quickReplies.map((qr) => (
                   <button
                     key={qr.id}
@@ -174,7 +164,11 @@ export function MessageComposer({
                     <Zap className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--gb-cyan)]" />
                     <span className="min-w-0">
                       <span className="block text-sm font-medium text-[var(--gb-text)]">{qr.title}</span>
-                      <span className="block truncate text-xs text-[var(--gb-muted)]">{qr.shortcut}</span>
+                      <span className="block truncate text-xs text-[var(--gb-muted)]">
+                        {qr.shortcut ? `${qr.shortcut} · ` : ""}
+                        {qr.content.replace(/\s+/g, " ").slice(0, 72)}
+                        {qr.content.length > 72 ? "…" : ""}
+                      </span>
                     </span>
                   </button>
                 ))}
@@ -195,12 +189,12 @@ export function MessageComposer({
             className="max-h-40 min-h-[44px] w-full resize-none bg-transparent px-4 pt-3 pb-2 text-sm text-[var(--gb-text)] outline-none placeholder:text-[var(--gb-muted)]"
           />
           <div className="flex items-center justify-between gap-2 px-2 pb-2">
-            <div className="flex items-center gap-1">
+            <div className="flex flex-wrap items-center gap-1">
               <button
                 type="button"
                 data-composer-toggle
                 title="Emojis"
-                className={`rounded-lg p-2 text-[var(--gb-muted)] transition hover:bg-[var(--gb-surface-2)] hover:text-[var(--gb-cyan)] ${
+                className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-[var(--gb-muted)] transition hover:bg-[var(--gb-surface-2)] hover:text-[var(--gb-cyan)] ${
                   emojiOpen ? "bg-[var(--gb-surface-2)] text-[var(--gb-cyan)]" : ""
                 }`}
                 onClick={() => {
@@ -209,14 +203,17 @@ export function MessageComposer({
                 }}
               >
                 <Smile className="h-4 w-4" />
+                <span className="hidden sm:inline">Emoji</span>
               </button>
               {quickReplies.length > 0 ? (
                 <button
                   type="button"
                   data-composer-toggle
-                  title="Mensagens rápidas"
-                  className={`rounded-lg p-2 text-[var(--gb-muted)] transition hover:bg-[var(--gb-surface-2)] hover:text-[var(--gb-cyan)] ${
-                    quickOpen ? "bg-[var(--gb-surface-2)] text-[var(--gb-cyan)]" : ""
+                  title="Abrir mensagens rápidas"
+                  className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition hover:bg-[var(--gb-surface-2)] hover:text-[var(--gb-cyan)] ${
+                    quickOpen
+                      ? "bg-[var(--gb-surface-2)] text-[var(--gb-cyan)]"
+                      : "text-[var(--gb-muted)]"
                   }`}
                   onClick={() => {
                     setQuickOpen((v) => !v);
@@ -224,9 +221,10 @@ export function MessageComposer({
                   }}
                 >
                   <Zap className="h-4 w-4" />
+                  Mensagens rápidas
                 </button>
               ) : null}
-              <span className="hidden text-[11px] text-[var(--gb-muted)] sm:inline">
+              <span className="hidden text-[11px] text-[var(--gb-muted)] lg:inline">
                 Enter envia · Shift+Enter quebra linha
               </span>
             </div>
