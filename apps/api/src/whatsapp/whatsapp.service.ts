@@ -188,6 +188,15 @@ export class WhatsappService {
         }`,
       );
     }
+    try {
+      await this.evolution.setIgnoreGroups(created.instanceName);
+    } catch (error) {
+      this.logger.warn(
+        `groupsIgnore não configurado para ${created.instanceName}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
 
     const instance = await this.prisma.whatsappInstance.create({
       data: {
@@ -231,6 +240,15 @@ export class WhatsappService {
     } catch (error) {
       this.logger.warn(
         `Webhook não configurado para ${created.instanceName}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+    try {
+      await this.evolution.setIgnoreGroups(created.instanceName);
+    } catch (error) {
+      this.logger.warn(
+        `groupsIgnore não configurado para ${created.instanceName}: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );
@@ -526,6 +544,18 @@ export class WhatsappService {
       return { ok: true, skipped: true };
     }
 
+    const remoteJid = (key.remoteJid ?? "").toLowerCase();
+    // Nunca responder grupos / listas de transmissão.
+    if (
+      remoteJid.endsWith("@g.us") ||
+      remoteJid.endsWith("@broadcast") ||
+      remoteJid.includes("@g.us") ||
+      data?.isGroup === true
+    ) {
+      this.logger.debug(`Ignorando mensagem de grupo/broadcast: ${remoteJid}`);
+      return { ok: true, skipped: true, reason: "group" };
+    }
+
     const instanceName = (body.instance as string) ?? (data?.instance as string);
     if (!instanceName) {
       return { ok: true, skipped: true };
@@ -544,7 +574,7 @@ export class WhatsappService {
       (message?.extendedTextMessage as { text?: string })?.text ??
       "";
 
-    const phone = (key.remoteJid ?? "").replace("@s.whatsapp.net", "").replace(/\D/g, "");
+    const phone = remoteJid.replace("@s.whatsapp.net", "").replace(/\D/g, "");
     const pushName = (data?.pushName as string) ?? undefined;
 
     return this.handleInbound({

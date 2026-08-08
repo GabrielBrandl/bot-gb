@@ -117,16 +117,42 @@ export class EvolutionClient {
 
       const { data } = await this.http.post<Record<string, unknown>>("/instance/create", payload);
       const instance = data.instance as { instanceName?: string } | undefined;
+      const instanceName = instance?.instanceName ?? name;
+      await this.setIgnoreGroups(instanceName).catch((err) => {
+        this.logger.warn(
+          `groupsIgnore não aplicado em ${instanceName}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
       return {
-        instanceName: instance?.instanceName ?? name,
+        instanceName,
         qr: this.normalizeQr(data),
       };
     } catch (error) {
       if (isAxiosError(error) && (error.response?.status === 403 || error.response?.status === 409)) {
         this.logger.warn(`Instância ${name} já existe na Evolution; reutilizando.`);
+        await this.setIgnoreGroups(name).catch(() => undefined);
         return { instanceName: name };
       }
       this.wrapError(error, "criar instância");
+    }
+  }
+
+  /** Impede o bot de processar mensagens de grupos no WhatsApp. */
+  async setIgnoreGroups(instanceName: string): Promise<unknown> {
+    try {
+      const { data } = await this.http.post(`/settings/set/${instanceName}`, {
+        rejectCall: false,
+        msgCall: "",
+        groupsIgnore: true,
+        alwaysOnline: false,
+        readMessages: false,
+        readStatus: false,
+        syncFullHistory: false,
+      });
+      this.logger.log(`groupsIgnore=true em ${instanceName}`);
+      return data;
+    } catch (error) {
+      this.wrapError(error, "configurar groupsIgnore");
     }
   }
 
