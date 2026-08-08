@@ -106,10 +106,281 @@ export class AutoSeedService implements OnModuleInit {
       // Sempre garante o cliente advocacia (idempotente), mesmo com DB já populado.
       await this.ensureAdvocaciaTenant();
       await this.ensureBoTiUsesClaude();
+      await this.ensureTiEsbamFlows();
       await this.ensureClaudeAgentsForAllTenants();
     } catch (err) {
       this.logger.error(`Inline seed failed: ${err instanceof Error ? err.message : String(err)}`);
       if (err instanceof Error && err.stack) this.logger.error(err.stack);
+    }
+  }
+
+  /** Garante menu + opções 1–5 (Portal/Email/Biblioteca/EAD/Outros) no tenant TI Esbam. */
+  private async ensureTiEsbamFlows() {
+    const tenant = await this.prisma.tenant.findUnique({ where: { slug: "ti-esbam" } });
+    if (!tenant) return;
+
+    const agent = await this.prisma.aIAgent.findFirst({
+      where: {
+        tenantId: tenant.id,
+        OR: [{ id: "seed-ai-agent-bot-ti" }, { name: { in: ["BoTI", "Bot Ti"] } }],
+      },
+    });
+    const agentId = agent?.id ?? "seed-ai-agent-bot-ti";
+
+    const required: Array<{ name: string; trigger: string; nodes: object }> = [
+      {
+        name: "01 — Boas-vindas e menu TI",
+        trigger:
+          "oi|olá|ola|bom dia|boa tarde|boa noite|menu|inicio|início|começar|comecar|ajuda|hello|hi",
+        nodes: {
+          nodes: [
+            { id: "t1", type: "trigger", data: { label: "Gatilho" }, position: { x: 40, y: 120 } },
+            {
+              id: "m1",
+              type: "send_text",
+              data: {
+                label: "Menu",
+                text: `*SUPORTE-TI — UNIESBAM* agradece seu contato.
+
+Para prosseguirmos com seu atendimento, por favor, nos informe o *assunto desejado*:
+
+*1.* Portal do Aluno
+*2.* Email Institucional
+*3.* Biblioteca Virtual
+*4.* Atividades EAD/AVA
+*5.* Outros
+
+Caso o tempo de espera seja prolongado, entre em contato pelo e-mail *ti@esbam.edu.br*, informando:
+• *NOME COMPLETO*
+• *CPF*
+• No campo *ASSUNTO*, o tema desejado
+
+Atenciosamente,
+*Setor de TI — UNIESBAM*`,
+              },
+              position: { x: 280, y: 120 },
+            },
+            {
+              id: "m2",
+              type: "send_text",
+              data: {
+                label: "Horário",
+                text: `Nosso horário de atendimento é:
+
+*Segunda-feira:* 07:30 – 21:50
+*Terça-feira:* 07:30 – 21:50
+*Quarta-feira:* 07:30 – 21:50
+*Quinta-feira:* 07:30 – 21:50
+*Sexta-feira:* 07:30 – 21:50
+*Sábado:* 08:00 – 11:50
+*Domingo:* Fechado
+
+Fuso: Manaus (America/Manaus)`,
+              },
+              position: { x: 520, y: 120 },
+            },
+          ],
+          edges: [
+            { id: "e1", source: "t1", target: "m1" },
+            { id: "e2", source: "m1", target: "m2" },
+          ],
+        },
+      },
+      {
+        name: "02 — Portal do Aluno",
+        trigger: "1|portal|portal do aluno",
+        nodes: {
+          nodes: [
+            { id: "t1", type: "trigger", data: { label: "Gatilho" }, position: { x: 40, y: 120 } },
+            {
+              id: "m1",
+              type: "send_text",
+              data: {
+                label: "Portal",
+                text: `Qual o problema com seu *PORTAL DO ALUNO*?
+
+Para facilitar o atendimento, se possível nos envie um *print da tela* com a mensagem de erro. 👍
+
+Em seguida, informe também seu *NOME COMPLETO* e *CPF*.
+Um atendente do Setor de TI assumirá seu chamado em breve.`,
+              },
+              position: { x: 280, y: 120 },
+            },
+            {
+              id: "human",
+              type: "transfer_human",
+              data: { label: "Fila humana" },
+              position: { x: 520, y: 120 },
+            },
+          ],
+          edges: [
+            { id: "e1", source: "t1", target: "m1" },
+            { id: "e2", source: "m1", target: "human" },
+          ],
+        },
+      },
+      {
+        name: "03 — Email Institucional",
+        trigger: "2|email|e-mail|email institucional|institucional",
+        nodes: {
+          nodes: [
+            { id: "t1", type: "trigger", data: { label: "Gatilho" }, position: { x: 40, y: 120 } },
+            {
+              id: "m1",
+              type: "send_text",
+              data: {
+                label: "Email",
+                text: `Qual o problema com seu *EMAIL INSTITUCIONAL*?
+
+Para facilitar o atendimento, se possível nos envie um *print da tela* com a mensagem de erro. 👍
+
+Informe também seu *NOME COMPLETO* e *CPF*.
+Um atendente do Setor de TI assumirá seu chamado em breve.`,
+              },
+              position: { x: 280, y: 120 },
+            },
+            {
+              id: "human",
+              type: "transfer_human",
+              data: { label: "Fila humana" },
+              position: { x: 520, y: 120 },
+            },
+          ],
+          edges: [
+            { id: "e1", source: "t1", target: "m1" },
+            { id: "e2", source: "m1", target: "human" },
+          ],
+        },
+      },
+      {
+        name: "04 — Biblioteca Virtual",
+        trigger: "3|biblioteca|biblioteca virtual",
+        nodes: {
+          nodes: [
+            { id: "t1", type: "trigger", data: { label: "Gatilho" }, position: { x: 40, y: 120 } },
+            {
+              id: "m1",
+              type: "send_text",
+              data: {
+                label: "Biblioteca",
+                text: `Qual o problema com a *BIBLIOTECA VIRTUAL*?
+
+Para facilitar o atendimento, se possível nos envie um *print da tela* com a mensagem de erro. 👍
+
+Informe também seu *NOME COMPLETO* e *CPF*.
+Um atendente do Setor de TI assumirá seu chamado em breve.`,
+              },
+              position: { x: 280, y: 120 },
+            },
+            {
+              id: "human",
+              type: "transfer_human",
+              data: { label: "Fila humana" },
+              position: { x: 520, y: 120 },
+            },
+          ],
+          edges: [
+            { id: "e1", source: "t1", target: "m1" },
+            { id: "e2", source: "m1", target: "human" },
+          ],
+        },
+      },
+      {
+        name: "05 — Atividades EAD/AVA",
+        trigger: "4|ead|ava|atividades ead|atividades ava",
+        nodes: {
+          nodes: [
+            { id: "t1", type: "trigger", data: { label: "Gatilho" }, position: { x: 40, y: 120 } },
+            {
+              id: "m1",
+              type: "send_text",
+              data: {
+                label: "EAD",
+                text: `Para assuntos de *Atividades EAD/AVA*, procure a Coordenação de EAD:
+
+📧 *coord.ead@esbam.edu.br*
+📞 *(92) 3305-1800* — ramal *1838*
+
+Se preferir, digite *menu* para voltar ao início.`,
+              },
+              position: { x: 280, y: 120 },
+            },
+          ],
+          edges: [{ id: "e1", source: "t1", target: "m1" }],
+        },
+      },
+      {
+        name: "06 — Outros assuntos (IA)",
+        trigger: "5|outros|outro",
+        nodes: {
+          nodes: [
+            { id: "t1", type: "trigger", data: { label: "Gatilho" }, position: { x: 40, y: 120 } },
+            {
+              id: "m1",
+              type: "send_text",
+              data: {
+                label: "Outros",
+                text: `Para *outros assuntos*, entre em contato com a equipe de Atendentes Virtuais:
+
+📞 *92 99267-3858*
+
+Ou digite *menu* para voltar ao atendimento do Setor de TI.
+Também pode digitar *ramais* para consultar ramais da instituição.`,
+              },
+              position: { x: 280, y: 120 },
+            },
+            {
+              id: "ai1",
+              type: "ai_reply",
+              data: { label: "BoTI", agentId },
+              position: { x: 520, y: 120 },
+            },
+          ],
+          edges: [
+            { id: "e1", source: "t1", target: "m1" },
+            { id: "e2", source: "m1", target: "ai1" },
+          ],
+        },
+      },
+    ];
+
+    let created = 0;
+    for (const flow of required) {
+      const exists = await this.prisma.flow.findFirst({
+        where: {
+          tenantId: tenant.id,
+          OR: [{ name: flow.name }, { trigger: flow.trigger }],
+        },
+      });
+      if (exists) continue;
+      await this.prisma.flow.create({
+        data: {
+          tenantId: tenant.id,
+          name: flow.name,
+          trigger: flow.trigger,
+          channel: Channel.WHATSAPP,
+          active: true,
+          nodes: flow.nodes,
+        },
+      });
+      created += 1;
+    }
+
+    // Remove menu curto legado (só boas-vindas sem opções 1–4).
+    const legacy = await this.prisma.flow.findMany({
+      where: {
+        tenantId: tenant.id,
+        name: { in: ["01 — Boas-vindas TI", "06 — Outros (IA BoTI)", "06 — Outros (IA Bot Ti)"] },
+      },
+    });
+    for (const old of legacy) {
+      await this.prisma.flow.delete({ where: { id: old.id } });
+    }
+
+    if (created > 0 || legacy.length > 0) {
+      this.logger.log(
+        `TI Esbam flows: +${created} criado(s), ${legacy.length} legado(s) removido(s)`,
+      );
     }
   }
 
