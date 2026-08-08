@@ -70,7 +70,7 @@ export class FlowExecutorService {
     }
 
     if (!matched) {
-      // Sem fluxo de palavra-chave: Bot Ti (agente IA ativo) responde.
+      // Sem fluxo de palavra-chave: agente de IA ativo do tenant responde (ex.: Claude na advocacia).
       const agent = await this.prisma.aIAgent.findFirst({
         where: { tenantId: ctx.tenantId, active: true },
         orderBy: { createdAt: "asc" },

@@ -2,7 +2,13 @@ import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Channel, PlanCode, UserRole } from "@bot-wpp/database";
 import * as bcrypt from "bcryptjs";
+import { execFile } from "child_process";
+import { existsSync } from "fs";
+import { join } from "path";
+import { promisify } from "util";
 import { PrismaService } from "../prisma/prisma.service";
+
+const execFileAsync = promisify(execFile);
 
 const BOT_TI_PROMPT = `Você é o *Bot Ti*, assistente virtual do Setor de TI da UNIESBAM (Faculdade Esbam).
 Responda em português do Brasil, de forma clara e objetiva.
@@ -21,27 +27,208 @@ export class AutoSeedService implements OnModuleInit {
   async onModuleInit() {
     try {
       const users = await this.prisma.user.count();
-      if (users > 0) {
-        this.logger.log(`Seed skipped — already have ${users} user(s)`);
-        return;
-      }
-
       const enabled = (this.config.get<string>("RUN_SEED") ?? process.env.RUN_SEED ?? "true")
         .toString()
         .trim()
         .toLowerCase();
-      if (enabled === "false" || enabled === "0" || enabled === "no") {
-        this.logger.warn("Database empty but RUN_SEED disabled");
-        return;
+
+      if (users === 0) {
+        if (enabled === "false" || enabled === "0" || enabled === "no") {
+          this.logger.warn("Database empty but RUN_SEED disabled");
+        } else {
+          this.logger.warn("Database empty — running inline production seed…");
+          await this.seedMinimal();
+          this.logger.log("Inline seed completed");
+        }
+      } else {
+        this.logger.log(`Base seed skipped — already have ${users} user(s)`);
       }
 
-      this.logger.warn("Database empty — running inline production seed…");
-      await this.seedMinimal();
-      this.logger.log("Inline seed completed");
+      // Sempre garante o cliente advocacia (idempotente), mesmo com DB já populado.
+      await this.ensureAdvocaciaTenant();
     } catch (err) {
       this.logger.error(`Inline seed failed: ${err instanceof Error ? err.message : String(err)}`);
       if (err instanceof Error && err.stack) this.logger.error(err.stack);
     }
+  }
+
+  private async ensureAdvocaciaTenant() {
+    const existing = await this.prisma.tenant.findUnique({ where: { slug: "mendes-advocacia" } });
+    if (existing) {
+      const flows = await this.prisma.flow.count({ where: { tenantId: existing.id } });
+      const agents = await this.prisma.aIAgent.count({ where: { tenantId: existing.id, active: true } });
+      if (flows > 0 && agents > 0) {
+        this.logger.log("Cliente mendes-advocacia já configurado (fluxos + IA)");
+        return;
+      }
+    }
+
+    this.logger.warn("Provisioning Mendes & Associados Advocacia (Claude)…");
+    const seedFile = join("/app/packages/database/prisma/run-seed-advocacia.ts");
+    const tsxBin = [
+      join("/app/node_modules/.bin/tsx"),
+      join("/app/packages/database/node_modules/.bin/tsx"),
+    ].find((p) => existsSync(p));
+
+    if (tsxBin && existsSync(seedFile)) {
+      try {
+        const { stdout, stderr } = await execFileAsync(tsxBin, [seedFile], {
+          cwd: "/app/packages/database",
+          env: process.env,
+          maxBuffer: 10 * 1024 * 1024,
+        });
+        if (stdout?.trim()) this.logger.log(stdout.trim());
+        if (stderr?.trim()) this.logger.warn(stderr.trim());
+        this.logger.log("Advocacia seed via tsx completed");
+        return;
+      } catch (err) {
+        this.logger.error(`tsx advocacia seed failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+
+    // Fallback: cria o mínimo inline (sem todos os textos longos dos fluxos do arquivo seed).
+    await this.seedAdvocaciaInline();
+  }
+
+  private async seedAdvocaciaInline() {
+    const passwordHash = await bcrypt.hash("admin123", 10);
+    const firm = "Mendes & Associados Advocacia";
+    const tenant = await this.prisma.tenant.upsert({
+      where: { slug: "mendes-advocacia" },
+      update: {
+        name: firm,
+        planId: "PRO",
+        plan: PlanCode.PRO,
+        billingStatus: "active",
+        maxAgents: 12,
+        maxInstances: 2,
+        primaryColor: "#1B3A4B",
+      },
+      create: {
+        name: firm,
+        slug: "mendes-advocacia",
+        planId: "PRO",
+        plan: PlanCode.PRO,
+        billingStatus: "active",
+        maxAgents: 12,
+        maxInstances: 2,
+        maxInstagram: 0,
+        maxContacts: 8000,
+        primaryColor: "#1B3A4B",
+        logoUrl: "/brand/gb-systems-logo.png",
+      },
+    });
+
+    for (const member of [
+      { email: "admin@mendesadvocacia.demo", name: "Dra. Ana Mendes", role: UserRole.ADMIN },
+      { email: "atendimento@mendesadvocacia.demo", name: "Atendimento Mendes", role: UserRole.AGENT },
+    ]) {
+      await this.prisma.user.upsert({
+        where: { email: member.email },
+        update: { passwordHash, name: member.name, role: member.role, tenantId: tenant.id, active: true },
+        create: {
+          tenantId: tenant.id,
+          email: member.email,
+          name: member.name,
+          passwordHash,
+          role: member.role,
+          active: true,
+        },
+      });
+    }
+
+    const agent = await this.prisma.aIAgent.upsert({
+      where: { id: "seed-ai-agent-mendes-claude" },
+      update: {
+        tenantId: tenant.id,
+        name: "Assistente Jurídico",
+        persona: "Assistente virtual jurídico com Claude",
+        modelProvider: "anthropic",
+        active: true,
+        systemPrompt:
+          "Você é o Assistente Jurídico (IA Claude) do escritório Mendes & Associados. Identifique-se como sistema automatizado. Não dê parecer vinculante nem prometa resultado. Em dúvidas complexas, faça triagem e oriente consulta com advogado. Português do Brasil, profissional e objetivo.",
+      },
+      create: {
+        id: "seed-ai-agent-mendes-claude",
+        tenantId: tenant.id,
+        name: "Assistente Jurídico",
+        persona: "Assistente virtual jurídico com Claude",
+        modelProvider: "anthropic",
+        active: true,
+        systemPrompt:
+          "Você é o Assistente Jurídico (IA Claude) do escritório Mendes & Associados. Identifique-se como sistema automatizado. Não dê parecer vinculante nem prometa resultado. Em dúvidas complexas, faça triagem e oriente consulta com advogado. Português do Brasil, profissional e objetivo.",
+      },
+    });
+
+    const flowCount = await this.prisma.flow.count({ where: { tenantId: tenant.id } });
+    if (flowCount === 0) {
+      await this.prisma.flow.create({
+        data: {
+          tenantId: tenant.id,
+          name: "01 — Menu advocacia",
+          trigger: "oi|olá|ola|bom dia|menu|ajuda",
+          channel: Channel.WHATSAPP,
+          active: true,
+          nodes: {
+            nodes: [
+              { id: "t1", type: "trigger", data: { label: "Gatilho" }, position: { x: 40, y: 120 } },
+              {
+                id: "m1",
+                type: "send_text",
+                data: {
+                  label: "Menu",
+                  text: `Olá! Bem-vindo(a) à *${firm}*.\nSou o *assistente virtual* (automatizado).\n\n*1.* Novo atendimento\n*2.* Já sou cliente\n*3.* Áreas\n*4.* Honorários\n*5.* Urgente\n*7.* Dúvida complexa (IA Claude)\n*8.* Falar com advogado`,
+                },
+                position: { x: 280, y: 120 },
+              },
+            ],
+            edges: [{ id: "e1", source: "t1", target: "m1" }],
+          },
+        },
+      });
+      await this.prisma.flow.create({
+        data: {
+          tenantId: tenant.id,
+          name: "08 — IA Claude",
+          trigger: "7|ia|claude|complexa",
+          channel: Channel.WHATSAPP,
+          active: true,
+          nodes: {
+            nodes: [
+              { id: "t1", type: "trigger", data: { label: "Gatilho" }, position: { x: 40, y: 120 } },
+              {
+                id: "ai1",
+                type: "ai_reply",
+                data: { label: "Claude", agentId: agent.id },
+                position: { x: 280, y: 120 },
+              },
+            ],
+            edges: [{ id: "e1", source: "t1", target: "ai1" }],
+          },
+        },
+      });
+    }
+
+    await this.prisma.businessHours.upsert({
+      where: { tenantId: tenant.id },
+      update: {},
+      create: {
+        tenantId: tenant.id,
+        timezone: "America/Manaus",
+        awayMessage: "Fora do horário humano (seg–sex 08:00–18:00). Digite menu para triagem.",
+        schedule: {
+          mon: { open: "08:00", close: "18:00" },
+          tue: { open: "08:00", close: "18:00" },
+          wed: { open: "08:00", close: "18:00" },
+          thu: { open: "08:00", close: "18:00" },
+          fri: { open: "08:00", close: "18:00" },
+          sat: null,
+          sun: null,
+        },
+      },
+    });
+
+    this.logger.log(`Advocacia inline OK — portal /t/${tenant.slug}`);
   }
 
   private async seedMinimal() {

@@ -6,8 +6,8 @@ import { EvolutionClient } from "../whatsapp/evolution.client";
 
 export type MessageAgent = { id: string; name: string };
 
-/** Nome exibido enquanto chatbot/IA atende (antes de um humano assumir). */
-export const BOT_DISPLAY_NAME = "Bot Ti";
+/** Nome padrão se o tenant ainda não tiver agente de IA. */
+export const BOT_DISPLAY_NAME = "Assistente virtual";
 
 /** Prefixa o nome do atendente para o cliente ver no WhatsApp/Instagram. */
 export function withAgentSignature(agentName: string, content: string): string {
@@ -40,6 +40,15 @@ export class MessagesService {
     });
   }
 
+  private async resolveBotDisplayName(tenantId: string): Promise<string> {
+    const bot = await this.prisma.aIAgent.findFirst({
+      where: { tenantId, active: true },
+      orderBy: { createdAt: "asc" },
+      select: { name: true },
+    });
+    return bot?.name?.trim() || BOT_DISPLAY_NAME;
+  }
+
   async sendText(
     tenantId: string,
     conversationId: string,
@@ -61,8 +70,8 @@ export class MessagesService {
     }
 
     const channel = conversation.channel ?? Channel.WHATSAPP;
-    // Humano: nome do atendente. Bot/IA (sem agent): "Bot Ti".
-    const signatureName = agent?.name?.trim() || BOT_DISPLAY_NAME;
+    // Humano: nome do atendente. Bot/IA: nome do agente ativo do tenant.
+    const signatureName = agent?.name?.trim() || (await this.resolveBotDisplayName(tenantId));
     const outboundContent = withAgentSignature(signatureName, content);
 
     if (channel === Channel.WHATSAPP) {

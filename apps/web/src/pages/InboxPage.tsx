@@ -279,7 +279,7 @@ export function InboxPage() {
                   {conv.assignee?.name ? (
                     <p className="mt-1 truncate text-xs text-[var(--gb-cyan)]">Atendendo: {conv.assignee.name}</p>
                   ) : (
-                    <p className="mt-1 truncate text-xs text-[var(--gb-cyan)]">Atendendo: Bot Ti</p>
+                    <p className="mt-1 truncate text-xs text-[var(--gb-cyan)]">Atendendo: Assistente virtual</p>
                   )}
                   {conv.lastMessageAt ? (
                     <p className="mt-1 text-xs text-slate-500">
@@ -356,7 +356,7 @@ export function InboxPage() {
                   <p className="mt-1 text-xs text-[var(--gb-cyan)]">
                     {selected.assignee?.name
                       ? `Atendendo: ${selected.assignee.name}`
-                      : "Atendendo: Bot Ti"}
+                      : "Atendendo: Assistente virtual"}
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -389,7 +389,7 @@ export function InboxPage() {
                         >
                           {msg.direction === "outbound" ? (
                             <p className="mb-1 text-[11px] font-semibold opacity-80">
-                              {msg.sentBy?.name ?? "Bot Ti"}
+                              {msg.sentBy?.name ?? "Assistente virtual"}
                             </p>
                           ) : null}
                           <p className="whitespace-pre-wrap">{msg.content}</p>

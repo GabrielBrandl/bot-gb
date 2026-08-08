@@ -1,6 +1,7 @@
 import { PrismaClient, UserRole, Channel, PlanCode } from "@prisma/client";
 import * as bcrypt from "bcryptjs";
 import { seedTiEsbam } from "./seed-ti-esbam";
+import { seedAdvocacia } from "./seed-advocacia";
 
 const prisma = new PrismaClient();
 
@@ -398,6 +399,7 @@ async function main() {
   });
 
   const tiEsbam = await seedTiEsbam(prisma, passwordHash);
+  const advocacia = await seedAdvocacia(prisma, passwordHash);
 
   console.log("Seed OK — GB Systems Omnichannel");
   console.log("Platform owner: admin@gbsystems.com.br / admin123");
@@ -411,6 +413,14 @@ async function main() {
     console.log(`  - ${email}`);
   }
   console.log("Portal: http://localhost:5173/t/ti-esbam/login");
+  console.log("---");
+  console.log("Cliente Advocacia:", advocacia.firm, advocacia.portal);
+  console.log("IA Claude:", advocacia.agentName, advocacia.agentId);
+  console.log("Login equipe (senha admin123):");
+  for (const email of advocacia.users) {
+    console.log(`  - ${email}`);
+  }
+  console.log("Portal: http://localhost:5173/t/mendes-advocacia/login");
 }
 
 main()
