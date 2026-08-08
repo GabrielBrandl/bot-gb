@@ -1,7 +1,7 @@
-import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { FlaskConical, Instagram, MessageCircle, Pencil, Send } from "lucide-react";
+import { Instagram, MessageCircle, Pencil } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import {
   contactsApi,
@@ -14,6 +14,7 @@ import {
 import { getSocket, disconnectSocket } from "../lib/socket";
 import type { Conversation, Message, QuickReply } from "../lib/types";
 import { Badge, statusBadgeVariant, statusLabel } from "../components/ui/Badge";
+import { MessageComposer } from "../components/inbox/MessageComposer";
 import {
   btnPrimary,
   btnSecondary,
@@ -119,8 +120,7 @@ export function InboxPage() {
     };
   }, [token, selectedId, loadMessages, loadConversations]);
 
-  async function handleSend(e: FormEvent) {
-    e.preventDefault();
+  async function handleSend() {
     if (!token || !selectedId || !draft.trim()) return;
     setSending(true);
     try {
@@ -404,27 +404,16 @@ export function InboxPage() {
                 )}
               </div>
 
-              {quickReplies.length > 0 ? (
-                <div className="flex gap-2 overflow-x-auto border-t border-[var(--gb-border)] px-4 py-2">
-                  {quickReplies.map((qr) => (
-                    <button key={qr.id} type="button" className={btnSecondary} onClick={() => setDraft(qr.content)}>
-                      {qr.title}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-
-              <form onSubmit={handleSend} className="flex gap-2 border-t border-[var(--gb-border)] p-4">
-                <input
-                  className={`${inputClass} flex-1`}
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  placeholder="Digite sua mensagem..."
+              {quickReplies.length > 0 || selected ? (
+                <MessageComposer
+                  draft={draft}
+                  onDraftChange={setDraft}
+                  onSend={handleSend}
+                  sending={sending}
+                  disabled={!selectedId}
+                  quickReplies={quickReplies}
                 />
-                <button type="submit" className={btnPrimary} disabled={sending || !draft.trim()}>
-                  <Send className="h-4 w-4" />
-                </button>
-              </form>
+              ) : null}
             </>
           ) : (
             <EmptyState message="Selecione uma conversa para começar." />
