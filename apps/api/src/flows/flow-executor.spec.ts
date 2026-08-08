@@ -1,4 +1,11 @@
-import { findMatchingFlow, isGreetingTrigger, isWithinBusinessHours } from "./flow-utils";
+import {
+  findMatchingFlow,
+  isGreetingText,
+  isGreetingTrigger,
+  isWithinBusinessHours,
+  isWithinGreetingCooldown,
+  GREETING_COOLDOWN_MS,
+} from "./flow-utils";
 
 describe("FlowExecutor keyword match", () => {
   const flows = [
@@ -44,6 +51,31 @@ describe("greeting trigger helper", () => {
   it("detects greeting triggers", () => {
     expect(isGreetingTrigger("oi|olá|menu")).toBe(true);
     expect(isGreetingTrigger("1|portal")).toBe(false);
+  });
+
+  it("detects greeting texts", () => {
+    expect(isGreetingText("oi")).toBe(true);
+    expect(isGreetingText("bom dia")).toBe(true);
+    expect(isGreetingText("2")).toBe(false);
+    expect(isGreetingText("email")).toBe(false);
+  });
+});
+
+describe("greeting cooldown", () => {
+  it("is within 12h cooldown", () => {
+    const now = new Date("2026-08-08T15:00:00.000Z");
+    const prior = new Date("2026-08-08T10:00:00.000Z");
+    expect(isWithinGreetingCooldown(prior, now)).toBe(true);
+  });
+
+  it("allows greeting after 12h", () => {
+    const now = new Date("2026-08-08T15:00:00.000Z");
+    const prior = new Date("2026-08-07T14:00:00.000Z");
+    expect(isWithinGreetingCooldown(prior, now, GREETING_COOLDOWN_MS)).toBe(false);
+  });
+
+  it("allows first contact without prior activity", () => {
+    expect(isWithinGreetingCooldown(null)).toBe(false);
   });
 });
 

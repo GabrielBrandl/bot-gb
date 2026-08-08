@@ -77,6 +77,32 @@ export function isGreetingTrigger(trigger: string): boolean {
   return triggerKeywords(trigger).some((k) => GREETING_KEYWORDS.has(k));
 }
 
+/** Texto do usuário que só inicia/reabre o menu (saudação). */
+export function isGreetingText(text: string): boolean {
+  const normalized = text.trim().toLowerCase();
+  if (!normalized) return false;
+  if (GREETING_KEYWORDS.has(normalized)) return true;
+  // "oi tudo bem" / "bom dia pessoal"
+  for (const keyword of GREETING_KEYWORDS) {
+    if (keyword === "menu") continue; // menu explícito tratado à parte
+    if (normalized === keyword) return true;
+    if (normalized.startsWith(`${keyword} `) || normalized.startsWith(`${keyword}\n`)) return true;
+  }
+  return false;
+}
+
+/** Cooldown padrão: não reenviar boas-vindas se o contato já falou há menos de 12h. */
+export const GREETING_COOLDOWN_MS = 12 * 60 * 60 * 1000;
+
+export function isWithinGreetingCooldown(
+  lastActivityAt: Date | null | undefined,
+  now = new Date(),
+  cooldownMs = GREETING_COOLDOWN_MS,
+): boolean {
+  if (!lastActivityAt) return false;
+  return now.getTime() - lastActivityAt.getTime() < cooldownMs;
+}
+
 export function getStartNode(graph: FlowGraph): FlowNode | undefined {
   return (
     graph.nodes.find((n) => n.type === "trigger" || n.type === "keyword") ??

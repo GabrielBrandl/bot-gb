@@ -9,8 +9,12 @@ import {
   findMatchingFlow,
   getNextNode,
   getStartNode,
+  isGreetingText,
+  isGreetingTrigger,
   isWithinBusinessHours,
+  isWithinGreetingCooldown,
   parseFlowGraph,
+  GREETING_COOLDOWN_MS,
   type BusinessSchedule,
 } from "./flow-utils";
 import type { FlowNode } from "@bot-wpp/shared-types";
@@ -64,6 +68,10 @@ export class FlowExecutorService {
       const away =
         hours?.awayMessage?.trim() ||
         "No momento estamos fora do horário de atendimento. Retornaremos assim que possível.";
+      // Evita spam de "fora do horário" a cada oi dentro de 12h.
+      if (isGreetingText(ctx.text) && (await this.isGreetingCoolingDown(ctx))) {
+        return;
+      }
       await this.messages.sendText(ctx.tenantId, ctx.conversationId, away);
       await this.conversations.setPendingUnassigned(ctx.tenantId, ctx.conversationId);
       return;
@@ -87,6 +95,18 @@ export class FlowExecutorService {
       return;
     }
 
+    // Boas-vindas / menu automático: só reenvia se o contato ficou 12h sem falar.
+    // "menu" explícito sempre libera o menu de novo.
+    const wantsMenuExplicitly = ctx.text.trim().toLowerCase() === "menu";
+    if (isGreetingTrigger(matched.trigger) && isGreetingText(ctx.text) && !wantsMenuExplicitly) {
+      if (await this.isGreetingCoolingDown(ctx)) {
+        this.logger.debug(
+          `Saudação ignorada (cooldown ${GREETING_COOLDOWN_MS / 3600000}h) conversa=${ctx.conversationId}`,
+        );
+        return;
+      }
+    }
+
     const graph = parseFlowGraph(matched.nodes);
     let current = getStartNode(graph);
     if (!current) {
@@ -99,6 +119,24 @@ export class FlowExecutorService {
       const next = await this.executeNode(ctx, current, graph);
       current = next;
     }
+  }
+
+  /** Já houve atividade anterior nesta conversa há menos de 12h? */
+  private async isGreetingCoolingDown(ctx: InboundFlowContext): Promise<boolean> {
+    const total = await this.prisma.message.count({
+      where: { tenantId: ctx.tenantId, conversationId: ctx.conversationId },
+    });
+    // Só a mensagem atual → primeiro contato, pode enviar boas-vindas.
+    if (total <= 1) return false;
+
+    const prior = await this.prisma.message.findFirst({
+      where: { tenantId: ctx.tenantId, conversationId: ctx.conversationId },
+      orderBy: { createdAt: "desc" },
+      skip: 1,
+      select: { createdAt: true },
+    });
+
+    return isWithinGreetingCooldown(prior?.createdAt ?? null);
   }
 
   private async executeNode(
