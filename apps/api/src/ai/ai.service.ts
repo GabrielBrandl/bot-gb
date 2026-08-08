@@ -84,7 +84,19 @@ export class AiService {
     input: { question: string; conversationId?: string },
   ) {
     const agent = await this.getAgent(tenantId, agentId);
-    const provider = this.getProvider(agent.modelProvider);
+    let provider = this.getProvider(agent.modelProvider);
+
+    // Se o provedor preferido não tem chave, tenta o outro (Claude ↔ OpenAI).
+    if (!provider.isAvailable()) {
+      const fallback =
+        provider === this.anthropic ? this.openai : this.anthropic;
+      if (fallback.isAvailable()) {
+        provider = fallback;
+      } else {
+        // Não envia "Configure OPENAI_API_KEY..." no WhatsApp — evita spam.
+        return { answer: "", sources: [], unavailable: true as const };
+      }
+    }
 
     const chunks = await this.knowledge.searchChunks(tenantId, input.question, agentId, 3);
     const context = chunks.map((c) => c.content).join("\n---\n");
@@ -114,7 +126,15 @@ export class AiService {
       : input.question;
 
     const response = await provider.complete({ systemPrompt, userMessage });
-    return { answer: response.text, sources: chunks };
+    const text = (response.text ?? "").trim();
+    if (
+      !text ||
+      /configure (openai|anthropic)_api_key/i.test(text) ||
+      /habilitar respostas de ia/i.test(text)
+    ) {
+      return { answer: "", sources: chunks, unavailable: true as const };
+    }
+    return { answer: text, sources: chunks };
   }
 
   async suggestReply(tenantId: string, conversationId: string, agentId?: string) {

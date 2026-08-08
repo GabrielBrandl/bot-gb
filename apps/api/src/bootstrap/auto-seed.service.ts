@@ -10,7 +10,7 @@ import { PrismaService } from "../prisma/prisma.service";
 
 const execFileAsync = promisify(execFile);
 
-const BOT_TI_PROMPT = `Você é o *Bot Ti*, assistente virtual do Setor de TI da UNIESBAM (Faculdade Esbam).
+const BOT_TI_PROMPT = `Você é o *BoTI*, assistente virtual do Setor de TI da UNIESBAM (Faculdade Esbam).
 Responda em português do Brasil, de forma clara e objetiva.
 Peça NOME COMPLETO + CPF quando for preciso abrir chamado humano.
 Horário: seg–sex 07:30–21:50, sáb 08:00–11:50 (Manaus). E-mail: ti@esbam.edu.br`;
@@ -46,10 +46,38 @@ export class AutoSeedService implements OnModuleInit {
 
       // Sempre garante o cliente advocacia (idempotente), mesmo com DB já populado.
       await this.ensureAdvocaciaTenant();
+      await this.ensureBoTiUsesClaude();
     } catch (err) {
       this.logger.error(`Inline seed failed: ${err instanceof Error ? err.message : String(err)}`);
       if (err instanceof Error && err.stack) this.logger.error(err.stack);
     }
+  }
+
+  /** Renomeia Bot Ti → BoTI e troca provedor para Claude (Anthropic). */
+  private async ensureBoTiUsesClaude() {
+    const agent = await this.prisma.aIAgent.findFirst({
+      where: {
+        OR: [{ id: "seed-ai-agent-bot-ti" }, { name: { in: ["Bot Ti", "BoTI"] } }],
+      },
+    });
+    if (!agent) return;
+
+    const provider = agent.modelProvider.toLowerCase();
+    const alreadyClaude =
+      agent.name === "BoTI" && (provider.includes("anthropic") || provider.includes("claude"));
+    if (alreadyClaude) return;
+
+    await this.prisma.aIAgent.update({
+      where: { id: agent.id },
+      data: {
+        name: "BoTI",
+        modelProvider: "anthropic",
+        persona: "Assistente virtual do Setor de TI — UNIESBAM (Claude)",
+        systemPrompt: BOT_TI_PROMPT,
+        active: true,
+      },
+    });
+    this.logger.log("BoTI renomeado e conectado ao Claude");
   }
 
   private async ensureAdvocaciaTenant() {
@@ -471,18 +499,18 @@ export class AutoSeedService implements OnModuleInit {
       where: { id: "seed-ai-agent-bot-ti" },
       update: {
         tenantId: ti.id,
-        name: "Bot Ti",
-        persona: "Assistente virtual do Setor de TI — UNIESBAM",
-        modelProvider: "openai",
+        name: "BoTI",
+        persona: "Assistente virtual do Setor de TI — UNIESBAM (Claude)",
+        modelProvider: "anthropic",
         active: true,
         systemPrompt: BOT_TI_PROMPT,
       },
       create: {
         id: "seed-ai-agent-bot-ti",
         tenantId: ti.id,
-        name: "Bot Ti",
-        persona: "Assistente virtual do Setor de TI — UNIESBAM",
-        modelProvider: "openai",
+        name: "BoTI",
+        persona: "Assistente virtual do Setor de TI — UNIESBAM (Claude)",
+        modelProvider: "anthropic",
         active: true,
         systemPrompt: BOT_TI_PROMPT,
       },
@@ -505,7 +533,7 @@ export class AutoSeedService implements OnModuleInit {
                 type: "send_text",
                 data: {
                   label: "Menu",
-                  text: "*SUPORTE-TI — UNIESBAM*\n\n1. Portal do Aluno\n2. Email Institucional\n3. Biblioteca Virtual\n4. EAD/AVA\n5. Outros (Bot Ti)\n\nDigite o número da opção.",
+                  text: "*SUPORTE-TI — UNIESBAM*\n\n1. Portal do Aluno\n2. Email Institucional\n3. Biblioteca Virtual\n4. EAD/AVA\n5. Outros (BoTI)\n\nDigite o número da opção.",
                 },
                 position: { x: 280, y: 120 },
               },
@@ -518,7 +546,7 @@ export class AutoSeedService implements OnModuleInit {
       await this.prisma.flow.create({
         data: {
           tenantId: ti.id,
-          name: "06 — Outros (IA Bot Ti)",
+          name: "06 — Outros (IA BoTI)",
           trigger: "5|outros|outro",
           channel: Channel.WHATSAPP,
           active: true,
@@ -528,7 +556,7 @@ export class AutoSeedService implements OnModuleInit {
               {
                 id: "ai1",
                 type: "ai_reply",
-                data: { label: "Bot Ti", agentId: agent.id },
+                data: { label: "BoTI", agentId: agent.id },
                 position: { x: 280, y: 120 },
               },
             ],

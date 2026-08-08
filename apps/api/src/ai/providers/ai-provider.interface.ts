@@ -17,6 +17,7 @@ export interface AiEmbeddingResponse {
 }
 
 export interface AiProvider {
+  isAvailable(): boolean;
   complete(request: AiCompletionRequest): Promise<AiCompletionResponse>;
   embed(request: AiEmbeddingRequest): Promise<AiEmbeddingResponse>;
 }

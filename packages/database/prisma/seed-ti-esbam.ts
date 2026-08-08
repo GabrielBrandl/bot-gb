@@ -70,13 +70,13 @@ Caso o tempo de espera seja prolongado, entre em contato pelo e-mail *ti@esbam.e
 Atenciosamente,
 *Setor de TI — UNIESBAM*`;
 
-const BOT_TI_SYSTEM_PROMPT = `Você é o *Bot Ti*, assistente virtual do Setor de TI da UNIESBAM (Faculdade Esbam).
+const BOT_TI_SYSTEM_PROMPT = `Você é o *BoTI*, assistente virtual do Setor de TI da UNIESBAM (Faculdade Esbam).
 
 Objetivo: orientar alunos e colaboradores em Portal do Aluno, e-mail institucional, Biblioteca Virtual, AVA/EAD e dúvidas gerais de TI.
 
 Regras:
 - Responda em português do Brasil, de forma clara, objetiva e cordial.
-- Assine-se mentalmente como Bot Ti; não invente que é um atendente humano.
+- Assine-se mentalmente como BoTI; não invente que é um atendente humano.
 - Se o assunto exigir ação técnica (reset de senha, desbloqueio, erro com print), peça NOME COMPLETO + CPF e oriente a aguardar um atendente humano.
 - Fora do escopo de TI, diga educadamente e sugira o canal correto quando souber.
 - Horário: seg–sex 07:30–21:50, sáb 08:00–11:50 (Manaus). Domingos fechado.
@@ -317,9 +317,9 @@ export async function seedTiEsbam(prisma: PrismaClient, passwordHash: string) {
   const botTi = await prisma.aIAgent.upsert({
     where: { id: "seed-ai-agent-bot-ti" },
     update: {
-      name: "Bot Ti",
-      persona: "Assistente virtual do Setor de TI — UNIESBAM",
-      modelProvider: "openai",
+      name: "BoTI",
+      persona: "Assistente virtual do Setor de TI — UNIESBAM (Claude)",
+      modelProvider: "anthropic",
       active: true,
       systemPrompt: BOT_TI_SYSTEM_PROMPT,
       tenantId: tenant.id,
@@ -327,9 +327,9 @@ export async function seedTiEsbam(prisma: PrismaClient, passwordHash: string) {
     create: {
       id: "seed-ai-agent-bot-ti",
       tenantId: tenant.id,
-      name: "Bot Ti",
-      persona: "Assistente virtual do Setor de TI — UNIESBAM",
-      modelProvider: "openai",
+      name: "BoTI",
+      persona: "Assistente virtual do Setor de TI — UNIESBAM (Claude)",
+      modelProvider: "anthropic",
       active: true,
       systemPrompt: BOT_TI_SYSTEM_PROMPT,
     },
@@ -416,7 +416,7 @@ export async function seedTiEsbam(prisma: PrismaClient, passwordHash: string) {
           {
             id: "ai1",
             type: "ai_reply",
-            data: { label: "Bot Ti", agentId: botTi.id },
+            data: { label: "BoTI", agentId: botTi.id },
             position: { x: 520, y: 120 },
           },
         ],
