@@ -29,10 +29,13 @@ export class EvolutionClient {
   private readonly apiKey: string;
 
   constructor(private readonly config: ConfigService) {
-    const baseURL = this.config.get<string>("EVOLUTION_API_URL", "http://localhost:8080");
+    const baseURL =
+      this.config.get<string>("EVOLUTION_API_URL")?.trim() ||
+      this.config.get<string>("EVOLUTION_SERVER_URL")?.trim() ||
+      "http://localhost:8080";
     this.apiKey = this.config.get<string>("EVOLUTION_API_KEY", "");
     this.http = axios.create({
-      baseURL,
+      baseURL: baseURL.replace(/\/$/, ""),
       timeout: 20000,
       headers: {
         apikey: this.apiKey,
