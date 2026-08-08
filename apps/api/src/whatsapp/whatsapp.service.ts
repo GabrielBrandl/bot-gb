@@ -386,7 +386,19 @@ export class WhatsappService {
       );
     }
 
-    const qr = await this.evolution.getPairingCode(instance.evolutionInstanceId, digits);
+    let qr: EvolutionQrResponse;
+    try {
+      qr = await this.evolution.getPairingCode(instance.evolutionInstanceId, digits);
+    } catch (error) {
+      // Instância sumiu da Evolution (redeploy/volume) — recria e tenta de novo.
+      this.logger.warn(
+        `Pareamento falhou; reprovisionando ${instance.evolutionInstanceId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      await this.provisionInstance(tenantId, id);
+      qr = await this.evolution.getPairingCode(instance.evolutionInstanceId, digits);
+    }
 
     const webhookUrl = this.resolveWebhookUrl();
     try {
