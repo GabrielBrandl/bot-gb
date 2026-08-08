@@ -56,6 +56,7 @@ export interface QuickReply {
   id: string;
   title: string;
   content: string;
+  shortcut?: string;
 }
 
 export interface KanbanStage {
