@@ -488,6 +488,118 @@ export async function seedTiEsbam(prisma: PrismaClient, passwordHash: string) {
       content:
         "Recebemos sua solicitação. Por favor, aguarde um momento enquanto verificamos — em breve um atendente do Setor de TI retorna. 👍",
     },
+    {
+      shortcut: "/email-temp",
+      title: "Email — acesso temporário 48h",
+      content: `*Prezado(a),*
+
+Liberaremos o acesso à conta de email: *[email]* por até *48hs*, após esse prazo a conta será desativada permanentemente.
+
+Segue abaixo a senha para acesso:
+
+Email: *[email]*
+Senha: *esbam2026*`,
+    },
+    {
+      shortcut: "/atendentes",
+      title: "Contato Atendentes Virtuais",
+      content: `Prezado(a),
+
+favor entrar em contato com a nossa equipe de Atendentes Virtuais através do número: *99267-3858*`,
+    },
+    {
+      shortcut: "/sem-vinculo",
+      title: "Sem vínculo ativo",
+      content: `*Prezado(a) aluno(a),*
+
+Em nosso sistema acadêmico consta que o aluno está *[status]* desde *[data]*, portanto sem vínculo ativo com a faculdade, conforme print abaixo:
+
+_[anexar print]_`,
+    },
+    {
+      shortcut: "/circular-email",
+      title: "Circular EMAIL INSTITUCIONAL",
+      content: `Segue em anexo a Circular de nº 04/2025 referente ao uso do EMAIL INSTITUCIONAL.`,
+    },
+    {
+      shortcut: "/email-criado",
+      title: "Email institucional criado",
+      content: `Prezado(a) Aluno(a),
+
+O seu email institucional foi criado.
+
+*Segue abaixo seus dados para acesso:*
+
+Provedor de email: gmail.com
+*conta de email:* *[email]*
+*senha:* *esbam2026*
+
+OBS.: Após o primeiro login a senha deverá ser obrigatoriamente alterada (mínimo 8 caracteres)`,
+    },
+    {
+      shortcut: "/secretaria",
+      title: "Encaminhar Secretaria Acadêmica",
+      content: `Prezado(a) aluno(a),
+
+Para verificar a situação, peço por gentileza que entre em contato diretamente com a Secretaria Acadêmica.`,
+    },
+    {
+      shortcut: "/spam-biblioteca",
+      title: "Verificar spam / Biblioteca",
+      content: `Prezado(a) aluno(a),
+
+Solicitamos que, por gentileza, verifique a sua caixa de spam/lixo eletrônico.
+
+Caso o problema persista, pedimos que entre em contato com a Biblioteca para que sejam realizadas as devidas correções.`,
+    },
+    {
+      shortcut: "/classroom",
+      title: "Código Google Classroom",
+      content: `*Prezado(a) aluno(a),*
+
+Solicitamos que entre em contato diretamente com o professor responsável pela disciplina para obter o código de acesso da turma no Google Classroom.
+
+Permanecemos à disposição para eventuais dúvidas.
+Atenciosamente`,
+    },
+    {
+      shortcut: "/portal-senha",
+      title: "Portal — senha redefinida",
+      content: `_Prezado(a) Aluno(a):_
+
+*Sua senha do Portal do Aluno foi REDEFINIDA e uma nova senha será enviada automaticamente para o email cadastrado no Sistema, conforme print abaixo:*
+
+_[anexar print]_
+
+Esse email está correto?
+
+_Obs: Caso não receba o email na Caixa de Entrada, favor verificar as pastas: Caixa de SPAM ou Lixo Eletrônico._`,
+    },
+    {
+      shortcut: "/email-senha",
+      title: "Email — senha redefinida",
+      content: `Prezado(a) Aluno(a),
+
+*A senha do seu e-mail institucional para uso e suporte com as aulas foi redefinida.*
+
+Segue abaixo seus dados para acesso:
+
+Provedor de email: gmail.com
+*conta de email:* *[email]*
+*senha:* *esbam2025*
+
+OBS.: Após o primeiro login a senha deverá ser obrigatoriamente alterada (mínimo 8 caracteres)`,
+    },
+    {
+      shortcut: "/resolvido",
+      title: "Problema resolvido",
+      content: `Prezado(a) aluno(a),
+
+O problema foi resolvido.
+Tente acessar novamente usando a senha padrão: *esbam2025*
+
+OBS.: Após o primeiro login a senha deverá ser obrigatoriamente alterada (mínimo 8 caracteres)`,
+    },
   ];
 
   for (const qr of quickReplies) {
