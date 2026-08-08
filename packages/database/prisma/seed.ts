@@ -311,25 +311,49 @@ async function main() {
     },
   });
 
+  await prisma.aIAgent.upsert({
+    where: { id: "seed-ai-agent-platform" },
+    update: {
+      tenantId: platformTenant.id,
+      name: "Assistente GB",
+      persona: "Assistente da plataforma GB Systems (Claude)",
+      modelProvider: "anthropic",
+      active: true,
+      systemPrompt:
+        "Você é o assistente da GB Systems (Claude). Atenda com clareza em WhatsApp e Instagram, qualifique leads e encaminhe para um humano quando necessário. Português do Brasil.",
+    },
+    create: {
+      id: "seed-ai-agent-platform",
+      tenantId: platformTenant.id,
+      name: "Assistente GB",
+      persona: "Assistente da plataforma GB Systems (Claude)",
+      modelProvider: "anthropic",
+      active: true,
+      systemPrompt:
+        "Você é o assistente da GB Systems (Claude). Atenda com clareza em WhatsApp e Instagram, qualifique leads e encaminhe para um humano quando necessário. Português do Brasil.",
+    },
+  });
+
   const agent = await prisma.aIAgent.upsert({
     where: { id: "seed-ai-agent-gb" },
     update: {
+      tenantId: tenant.id,
       name: "Assistente GB",
-      persona: "Atendente omnichannel GB Systems",
-      modelProvider: "openai",
+      persona: "Atendente omnichannel GB Systems (Claude)",
+      modelProvider: "anthropic",
       active: true,
       systemPrompt:
-        "Você é o assistente da GB Systems. Atenda com clareza em WhatsApp e Instagram, qualifique leads e encaminhe para um humano quando necessário.",
+        "Você é o assistente da GB Systems (Claude). Atenda com clareza em WhatsApp e Instagram, qualifique leads e encaminhe para um humano quando necessário. Português do Brasil.",
     },
     create: {
       id: "seed-ai-agent-gb",
       tenantId: tenant.id,
       name: "Assistente GB",
-      persona: "Atendente omnichannel GB Systems",
-      modelProvider: "openai",
+      persona: "Atendente omnichannel GB Systems (Claude)",
+      modelProvider: "anthropic",
       active: true,
       systemPrompt:
-        "Você é o assistente da GB Systems. Atenda com clareza em WhatsApp e Instagram, qualifique leads e encaminhe para um humano quando necessário.",
+        "Você é o assistente da GB Systems (Claude). Atenda com clareza em WhatsApp e Instagram, qualifique leads e encaminhe para um humano quando necessário. Português do Brasil.",
     },
   });
 

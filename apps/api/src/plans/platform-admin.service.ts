@@ -245,6 +245,19 @@ export class PlatformAdminService {
         },
       });
 
+      if (plan.aiEnabled !== false) {
+        await tx.aIAgent.create({
+          data: {
+            tenantId: tenant.id,
+            name: `Assistente ${tenant.name}`,
+            persona: `Assistente virtual — ${tenant.name} (Claude)`,
+            modelProvider: "anthropic",
+            active: true,
+            systemPrompt: `Você é o assistente virtual de ${tenant.name}, powered by Claude. Responda em português do Brasil, de forma clara e profissional. Encaminhe para um atendente humano quando a solicitação for sensível ou exigir ação manual.`,
+          },
+        });
+      }
+
       return { tenant, admin };
     });
 

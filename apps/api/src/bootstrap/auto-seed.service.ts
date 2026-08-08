@@ -15,6 +15,65 @@ Responda em português do Brasil, de forma clara e objetiva.
 Peça NOME COMPLETO + CPF quando for preciso abrir chamado humano.
 Horário: seg–sex 07:30–21:50, sáb 08:00–11:50 (Manaus). E-mail: ti@esbam.edu.br`;
 
+const MENDES_PROMPT =
+  "Você é o Assistente Jurídico (IA Claude) do escritório Mendes & Associados. Identifique-se como sistema automatizado. Não dê parecer vinculante nem prometa resultado. Em dúvidas complexas, faça triagem e oriente consulta com advogado. Português do Brasil, profissional e objetivo.";
+
+const GB_PROMPT =
+  "Você é o assistente da GB Systems (Claude). Atenda com clareza em WhatsApp e Instagram, qualifique leads e encaminhe para um humano quando necessário. Português do Brasil.";
+
+type ClaudeAgentSpec = {
+  seedId: string;
+  name: string;
+  persona: string;
+  systemPrompt: string;
+};
+
+function claudeSpecForTenant(tenant: { slug: string; name: string }): ClaudeAgentSpec {
+  switch (tenant.slug) {
+    case "ti-esbam":
+      return {
+        seedId: "seed-ai-agent-bot-ti",
+        name: "BoTI",
+        persona: "Assistente virtual do Setor de TI — UNIESBAM (Claude)",
+        systemPrompt: BOT_TI_PROMPT,
+      };
+    case "mendes-advocacia":
+      return {
+        seedId: "seed-ai-agent-mendes-claude",
+        name: "Assistente Jurídico",
+        persona: "Assistente virtual jurídico com Claude",
+        systemPrompt: MENDES_PROMPT,
+      };
+    case "demo":
+    case "demo-gb":
+      return {
+        seedId: "seed-ai-agent-gb",
+        name: "Assistente GB",
+        persona: "Atendente omnichannel GB Systems (Claude)",
+        systemPrompt: GB_PROMPT,
+      };
+    case "gb-systems":
+      return {
+        seedId: "seed-ai-agent-platform",
+        name: "Assistente GB",
+        persona: "Assistente da plataforma GB Systems (Claude)",
+        systemPrompt: GB_PROMPT,
+      };
+    default:
+      return {
+        seedId: `seed-ai-agent-${tenant.slug}-claude`,
+        name: `Assistente ${tenant.name}`,
+        persona: `Assistente virtual — ${tenant.name} (Claude)`,
+        systemPrompt: `Você é o assistente virtual de ${tenant.name}, powered by Claude. Responda em português do Brasil, de forma clara e profissional. Encaminhe para um atendente humano quando a solicitação for sensível ou exigir ação manual.`,
+      };
+  }
+}
+
+function isClaudeProvider(provider: string) {
+  const p = provider.toLowerCase();
+  return p.includes("anthropic") || p.includes("claude");
+}
+
 @Injectable()
 export class AutoSeedService implements OnModuleInit {
   private readonly logger = new Logger(AutoSeedService.name);
@@ -47,6 +106,7 @@ export class AutoSeedService implements OnModuleInit {
       // Sempre garante o cliente advocacia (idempotente), mesmo com DB já populado.
       await this.ensureAdvocaciaTenant();
       await this.ensureBoTiUsesClaude();
+      await this.ensureClaudeAgentsForAllTenants();
     } catch (err) {
       this.logger.error(`Inline seed failed: ${err instanceof Error ? err.message : String(err)}`);
       if (err instanceof Error && err.stack) this.logger.error(err.stack);
@@ -62,9 +122,7 @@ export class AutoSeedService implements OnModuleInit {
     });
     if (!agent) return;
 
-    const provider = agent.modelProvider.toLowerCase();
-    const alreadyClaude =
-      agent.name === "BoTI" && (provider.includes("anthropic") || provider.includes("claude"));
+    const alreadyClaude = agent.name === "BoTI" && isClaudeProvider(agent.modelProvider);
     if (alreadyClaude) return;
 
     await this.prisma.aIAgent.update({
@@ -78,6 +136,76 @@ export class AutoSeedService implements OnModuleInit {
       },
     });
     this.logger.log("BoTI renomeado e conectado ao Claude");
+  }
+
+  /** Garante 1 agente Claude ativo por empresa (tenant). */
+  private async ensureClaudeAgentsForAllTenants() {
+    const tenants = await this.prisma.tenant.findMany({
+      select: { id: true, slug: true, name: true },
+      orderBy: { createdAt: "asc" },
+    });
+
+    let created = 0;
+    let updated = 0;
+
+    for (const tenant of tenants) {
+      const spec = claudeSpecForTenant(tenant);
+      const agents = await this.prisma.aIAgent.findMany({
+        where: { tenantId: tenant.id },
+        orderBy: { createdAt: "asc" },
+      });
+
+      const bySeedId = agents.find((a) => a.id === spec.seedId);
+      const claude = agents.find((a) => isClaudeProvider(a.modelProvider));
+      const target = bySeedId ?? claude ?? agents[0];
+
+      if (!target) {
+        await this.prisma.aIAgent.create({
+          data: {
+            id: spec.seedId,
+            tenantId: tenant.id,
+            name: spec.name,
+            persona: spec.persona,
+            modelProvider: "anthropic",
+            systemPrompt: spec.systemPrompt,
+            active: true,
+          },
+        });
+        created += 1;
+        this.logger.log(`IA Claude criada — ${tenant.slug} (${spec.name})`);
+        continue;
+      }
+
+      const nextName =
+        target.name === "Bot Ti" ? "BoTI" : bySeedId || !isClaudeProvider(target.modelProvider)
+          ? spec.name
+          : target.name;
+      const nextPrompt = target.systemPrompt?.trim() ? target.systemPrompt : spec.systemPrompt;
+      const needsUpdate =
+        !isClaudeProvider(target.modelProvider) ||
+        !target.active ||
+        target.name !== nextName ||
+        (!target.systemPrompt?.trim() && Boolean(spec.systemPrompt));
+
+      if (needsUpdate) {
+        await this.prisma.aIAgent.update({
+          where: { id: target.id },
+          data: {
+            name: nextName,
+            persona: bySeedId || !isClaudeProvider(target.modelProvider) ? spec.persona : target.persona,
+            modelProvider: "anthropic",
+            systemPrompt: nextPrompt,
+            active: true,
+          },
+        });
+        updated += 1;
+        this.logger.log(`IA Claude atualizada — ${tenant.slug} (${target.id})`);
+      }
+    }
+
+    this.logger.log(
+      `Claude por empresa: ${tenants.length} tenant(s), ${created} criado(s), ${updated} atualizado(s)`,
+    );
   }
 
   private async ensureAdvocaciaTenant() {
@@ -389,6 +517,27 @@ export class AutoSeedService implements OnModuleInit {
       },
     });
 
+    await this.prisma.aIAgent.upsert({
+      where: { id: "seed-ai-agent-platform" },
+      update: {
+        tenantId: platform.id,
+        name: "Assistente GB",
+        persona: "Assistente da plataforma GB Systems (Claude)",
+        modelProvider: "anthropic",
+        active: true,
+        systemPrompt: GB_PROMPT,
+      },
+      create: {
+        id: "seed-ai-agent-platform",
+        tenantId: platform.id,
+        name: "Assistente GB",
+        persona: "Assistente da plataforma GB Systems (Claude)",
+        modelProvider: "anthropic",
+        active: true,
+        systemPrompt: GB_PROMPT,
+      },
+    });
+
     const demo = await this.prisma.tenant.upsert({
       where: { slug: "demo" },
       update: {},
@@ -415,6 +564,27 @@ export class AutoSeedService implements OnModuleInit {
         passwordHash,
         role: UserRole.ADMIN,
         active: true,
+      },
+    });
+
+    await this.prisma.aIAgent.upsert({
+      where: { id: "seed-ai-agent-gb" },
+      update: {
+        tenantId: demo.id,
+        name: "Assistente GB",
+        persona: "Atendente omnichannel GB Systems (Claude)",
+        modelProvider: "anthropic",
+        active: true,
+        systemPrompt: GB_PROMPT,
+      },
+      create: {
+        id: "seed-ai-agent-gb",
+        tenantId: demo.id,
+        name: "Assistente GB",
+        persona: "Atendente omnichannel GB Systems (Claude)",
+        modelProvider: "anthropic",
+        active: true,
+        systemPrompt: GB_PROMPT,
       },
     });
 
