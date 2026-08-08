@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Injectable, NotFoundException, Logger } from "@nestjs/common";
 import { Channel } from "@bot-wpp/database";
 import { PrismaService } from "../prisma/prisma.service";
 import { RealtimeService } from "../realtime/realtime.service";
@@ -9,6 +9,9 @@ export type MessageAgent = { id: string; name: string };
 /** Nome padrão se o tenant ainda não tiver agente de IA. */
 export const BOT_DISPLAY_NAME = "Assistente virtual";
 
+/** Não reenvia a mesma resposta automática em menos de 2 minutos. */
+const OUTBOUND_DEDUPE_MS = 2 * 60 * 1000;
+
 /** Prefixa o nome do atendente para o cliente ver no WhatsApp/Instagram. */
 export function withAgentSignature(agentName: string, content: string): string {
   const name = agentName.trim();
@@ -18,6 +21,8 @@ export function withAgentSignature(agentName: string, content: string): string {
 
 @Injectable()
 export class MessagesService {
+  private readonly logger = new Logger(MessagesService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly realtime: RealtimeService,
@@ -73,6 +78,28 @@ export class MessagesService {
     // Humano: nome do atendente. Bot/IA: nome do agente ativo do tenant.
     const signatureName = agent?.name?.trim() || (await this.resolveBotDisplayName(tenantId));
     const outboundContent = withAgentSignature(signatureName, content);
+
+    // Anti-spam: mesma resposta automática já enviada há pouco → não repete.
+    if (!agent?.id && !mediaUrl) {
+      const recentDup = await this.prisma.message.findFirst({
+        where: {
+          tenantId,
+          conversationId,
+          direction: "outbound",
+          content,
+          sentByUserId: null,
+          createdAt: { gte: new Date(Date.now() - OUTBOUND_DEDUPE_MS) },
+        },
+        orderBy: { createdAt: "desc" },
+        include: { sentBy: { select: { id: true, name: true } } },
+      });
+      if (recentDup) {
+        this.logger.warn(
+          `Outbound duplicado ignorado conversa=${conversationId} (já enviado há <${OUTBOUND_DEDUPE_MS / 1000}s)`,
+        );
+        return recentDup;
+      }
+    }
 
     if (channel === Channel.WHATSAPP) {
       const instance = conversation.instance;

@@ -538,7 +538,25 @@ export class WhatsappService {
       return { ok: true, skipped: true };
     }
 
-    const data = body.data as Record<string, unknown> | undefined;
+    // Evolution pode mandar um objeto ou uma lista de mensagens no mesmo webhook.
+    const rawData = body.data;
+    const payloads: Record<string, unknown>[] = Array.isArray(rawData)
+      ? (rawData as Record<string, unknown>[])
+      : rawData && typeof rawData === "object"
+        ? [rawData as Record<string, unknown>]
+        : [];
+
+    const results = [];
+    for (const data of payloads) {
+      results.push(await this.processInboundUpsert(body, data));
+    }
+    return { ok: true, results };
+  }
+
+  private async processInboundUpsert(
+    body: Record<string, unknown>,
+    data: Record<string, unknown>,
+  ) {
     const key = data?.key as { remoteJid?: string; id?: string; fromMe?: boolean } | undefined;
     if (!key || key.fromMe) {
       return { ok: true, skipped: true };
@@ -569,10 +587,17 @@ export class WhatsappService {
     }
 
     const message = data?.message as Record<string, unknown> | undefined;
-    const text =
+    const text = (
       (message?.conversation as string) ??
       (message?.extendedTextMessage as { text?: string })?.text ??
-      "";
+      (message?.imageMessage as { caption?: string })?.caption ??
+      ""
+    ).trim();
+
+    // Upserts sem texto (status, protocolo, mídia sem caption) não disparam fluxo.
+    if (!text) {
+      return { ok: true, skipped: true, reason: "empty" };
+    }
 
     const phone = remoteJid.replace("@s.whatsapp.net", "").replace(/\D/g, "");
     const pushName = (data?.pushName as string) ?? undefined;
@@ -591,6 +616,18 @@ export class WhatsappService {
     const phone = input.phone.replace(/\D/g, "");
     if (!phone) {
       throw new BadRequestException("Telefone inválido");
+    }
+
+    // Idempotência: Evolution reenvia o mesmo webhook → não processa de novo.
+    if (input.externalId) {
+      const already = await this.prisma.message.findFirst({
+        where: { tenantId: input.tenantId, externalId: input.externalId },
+        select: { id: true, conversationId: true },
+      });
+      if (already) {
+        this.logger.debug(`Webhook duplicado ignorado externalId=${input.externalId}`);
+        return { duplicated: true, conversationId: already.conversationId };
+      }
     }
 
     const contact = await this.prisma.contact.upsert({
@@ -617,6 +654,24 @@ export class WhatsappService {
           status: "open",
         },
       });
+    }
+
+    // Debounce: mesmo texto na mesma conversa em <45s (retry sem o mesmo id).
+    const recentSame = await this.prisma.message.findFirst({
+      where: {
+        tenantId: input.tenantId,
+        conversationId: conversation.id,
+        direction: "inbound",
+        content: input.text,
+        createdAt: { gte: new Date(Date.now() - 120_000) },
+      },
+      select: { id: true },
+    });
+    if (recentSame) {
+      this.logger.warn(
+        `Inbound repetido ignorado conversa=${conversation.id} texto="${input.text.slice(0, 40)}"`,
+      );
+      return { duplicated: true, conversationId: conversation.id };
     }
 
     const message = await this.prisma.message.create({

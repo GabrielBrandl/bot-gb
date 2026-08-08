@@ -242,6 +242,7 @@ model Message {
 
   @@index([conversationId, createdAt])
   @@index([tenantId])
+  @@index([tenantId, externalId])
   @@index([sentByUserId])
   @@map("messages")
 }
