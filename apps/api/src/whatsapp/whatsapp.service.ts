@@ -253,12 +253,16 @@ export class WhatsappService {
 
   async evolutionStatus() {
     const online = await this.evolution.isAvailable();
+    const url =
+      this.config.get<string>("EVOLUTION_API_URL")?.trim() ||
+      this.config.get<string>("EVOLUTION_SERVER_URL")?.trim() ||
+      "http://localhost:8080";
     return {
       online,
-      url: this.config.get<string>("EVOLUTION_API_URL", "http://localhost:8080"),
+      url,
       hint: online
         ? "Evolution API online"
-        : "Evolution offline. Abra o Docker Desktop e rode: docker compose -f docker/docker-compose.evolution.yml up -d",
+        : "Evolution offline. Confira EVOLUTION_API_URL no EasyPanel e se o serviço evolution-api está no ar.",
     };
   }
 

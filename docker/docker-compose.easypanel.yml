@@ -18,7 +18,7 @@ x-api-env: &api-env
   API_PREFIX: api
   CORS_ORIGIN: ${CORS_ORIGIN}
   PUBLIC_API_URL: ${PUBLIC_API_URL}
-  EVOLUTION_API_URL: ${EVOLUTION_API_URL:-http://evolution-api:8080}
+  EVOLUTION_API_URL: ${EVOLUTION_API_URL:-https://bot-gb-evo.9nb5f0.easypanel.host}
   EVOLUTION_API_KEY: ${EVOLUTION_API_KEY}
   EVOLUTION_WEBHOOK_URL: ${EVOLUTION_WEBHOOK_URL}
   EVOLUTION_WEBHOOK_SECRET: ${EVOLUTION_WEBHOOK_SECRET}
@@ -139,7 +139,7 @@ services:
       DIRECT_URL: ${DIRECT_URL:-postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/bot_wpp?schema=public}
       REDIS_HOST: redis
       REDIS_PORT: "6379"
-      EVOLUTION_API_URL: ${EVOLUTION_API_URL:-http://evolution-api:8080}
+      EVOLUTION_API_URL: ${EVOLUTION_API_URL:-https://bot-gb-evo.9nb5f0.easypanel.host}
       EVOLUTION_API_KEY: ${EVOLUTION_API_KEY}
     depends_on:
       postgres:

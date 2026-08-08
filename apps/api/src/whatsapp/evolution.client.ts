@@ -50,9 +50,17 @@ export class EvolutionClient {
         typeof error.response?.data === "object" && error.response?.data
           ? JSON.stringify(error.response.data)
           : error.message;
-      this.logger.error(`${context}: ${detail}`);
+      this.logger.error(
+        `${context}: ${detail} (baseURL=${this.http.defaults.baseURL}, code=${error.code ?? "n/a"}, status=${error.response?.status ?? "n/a"})`,
+      );
+      const hint =
+        error.code === "ECONNREFUSED" || error.code === "ENOTFOUND" || error.code === "ECONNABORTED"
+          ? ` Sem conexão com ${this.http.defaults.baseURL}.`
+          : error.response?.status
+            ? ` Evolution respondeu HTTP ${error.response.status}.`
+            : "";
       throw new ServiceUnavailableException(
-        `Evolution API indisponível ao ${context}. Verifique se o container evolution-api está no ar e se EVOLUTION_API_URL / EVOLUTION_API_KEY estão corretos.`,
+        `Evolution API indisponível ao ${context}.${hint} Verifique EVOLUTION_API_URL / EVOLUTION_API_KEY.`,
       );
     }
     throw new ServiceUnavailableException(`Evolution API indisponível ao ${context}.`);
