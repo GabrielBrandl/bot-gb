@@ -44,8 +44,11 @@ export class FlowExecutorService {
       where: { id: ctx.conversationId, tenantId: ctx.tenantId },
     });
 
-    // Se um atendente humano já assumiu, não interferir com a automação.
+    // Atendente assumiu (atribuído) OU já enviou qualquer mensagem → bot silencia.
     if (conversation?.assignedTo) {
+      return;
+    }
+    if (await this.hasHumanOutbound(ctx)) {
       return;
     }
 
@@ -63,13 +66,13 @@ export class FlowExecutorService {
       hours?.timezone ?? "America/Manaus",
     );
 
-    // Fora do horário: responde com a mensagem de ausência (qualquer mensagem).
+    // Fora do horário: só a mensagem de ausência (com o horário). Sem menu/fluxos.
     if (!open) {
       const away =
         hours?.awayMessage?.trim() ||
         "No momento estamos fora do horário de atendimento. Retornaremos assim que possível.";
-      // Evita spam de "fora do horário" a cada oi dentro de 12h.
-      if (isGreetingText(ctx.text) && (await this.isGreetingCoolingDown(ctx))) {
+      // Evita reenviar o horário a cada mensagem dentro de 12h.
+      if (await this.isGreetingCoolingDown(ctx)) {
         return;
       }
       await this.messages.sendText(ctx.tenantId, ctx.conversationId, away);
@@ -137,6 +140,20 @@ export class FlowExecutorService {
     });
 
     return isWithinGreetingCooldown(prior?.createdAt ?? null);
+  }
+
+  /** Qualquer outbound com sentByUserId = atendente humano já falou nesta conversa. */
+  private async hasHumanOutbound(ctx: InboundFlowContext): Promise<boolean> {
+    const humanMsg = await this.prisma.message.findFirst({
+      where: {
+        tenantId: ctx.tenantId,
+        conversationId: ctx.conversationId,
+        direction: "outbound",
+        sentByUserId: { not: null },
+      },
+      select: { id: true },
+    });
+    return Boolean(humanMsg);
   }
 
   private async executeNode(

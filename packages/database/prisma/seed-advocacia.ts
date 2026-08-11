@@ -394,10 +394,8 @@ export async function seedAdvocacia(prisma: PrismaClient, passwordHash: string) 
     {
       name: "01 — Boas-vindas e menu",
       trigger: "oi|olá|ola|bom dia|boa tarde|boa noite|menu|inicio|início|começar|comecar|ajuda|hello|hi",
-      graph: linearFlow([
-        { id: "m1", label: "Menu", text: MENU_TEXT },
-        { id: "m2", label: "Horário", text: HOURS_TEXT },
-      ]),
+      // Horário humano só fora do expediente (BusinessHours.awayMessage).
+      graph: linearFlow([{ id: "m1", label: "Menu", text: MENU_TEXT }]),
     },
     {
       name: "02 — Novo atendimento / triagem",

@@ -160,30 +160,9 @@ Atenciosamente,
               },
               position: { x: 280, y: 120 },
             },
-            {
-              id: "m2",
-              type: "send_text",
-              data: {
-                label: "Horário",
-                text: `Nosso horário de atendimento é:
-
-*Segunda-feira:* 07:30 – 21:50
-*Terça-feira:* 07:30 – 21:50
-*Quarta-feira:* 07:30 – 21:50
-*Quinta-feira:* 07:30 – 21:50
-*Sexta-feira:* 07:30 – 21:50
-*Sábado:* 08:00 – 11:50
-*Domingo:* Fechado
-
-Fuso: Manaus (America/Manaus)`,
-              },
-              position: { x: 520, y: 120 },
-            },
           ],
-          edges: [
-            { id: "e1", source: "t1", target: "m1" },
-            { id: "e2", source: "m1", target: "m2" },
-          ],
+          // Sem nó de horário: fora do expediente usa BusinessHours.awayMessage.
+          edges: [{ id: "e1", source: "t1", target: "m1" }],
         },
       },
       {
@@ -345,6 +324,7 @@ Também pode digitar *ramais* para consultar ramais da instituição.`,
     ];
 
     let created = 0;
+    let updated = 0;
     for (const flow of required) {
       const exists = await this.prisma.flow.findFirst({
         where: {
@@ -352,7 +332,25 @@ Também pode digitar *ramais* para consultar ramais da instituição.`,
           OR: [{ name: flow.name }, { trigger: flow.trigger }],
         },
       });
-      if (exists) continue;
+      if (exists) {
+        // Corrige boas-vindas legadas que ainda encadeiam o horário após o menu.
+        if (flow.name === "01 — Boas-vindas e menu TI") {
+          const nodesJson = JSON.stringify(exists.nodes ?? {});
+          if (nodesJson.includes('"m2"') || /horário de atendimento/i.test(nodesJson)) {
+            await this.prisma.flow.update({
+              where: { id: exists.id },
+              data: {
+                name: flow.name,
+                trigger: flow.trigger,
+                nodes: flow.nodes,
+                active: true,
+              },
+            });
+            updated += 1;
+          }
+        }
+        continue;
+      }
       await this.prisma.flow.create({
         data: {
           tenantId: tenant.id,
@@ -366,6 +364,56 @@ Também pode digitar *ramais* para consultar ramais da instituição.`,
       created += 1;
     }
 
+    // Garante mensagem de ausência = horário (só disparada fora do expediente).
+    const awayMessage = `No momento estamos *fora do horário de atendimento*.
+
+Nosso horário de atendimento é:
+
+*Segunda-feira:* 07:30 – 21:50
+*Terça-feira:* 07:30 – 21:50
+*Quarta-feira:* 07:30 – 21:50
+*Quinta-feira:* 07:30 – 21:50
+*Sexta-feira:* 07:30 – 21:50
+*Sábado:* 08:00 – 11:50
+*Domingo:* Fechado
+
+Fuso: Manaus (America/Manaus)
+
+Retornaremos assim que possível.
+Atenciosamente,
+*Setor de TI — UNIESBAM*`;
+
+    await this.prisma.businessHours.upsert({
+      where: { tenantId: tenant.id },
+      update: {
+        timezone: "America/Manaus",
+        awayMessage,
+        schedule: {
+          mon: { open: "07:30", close: "21:50" },
+          tue: { open: "07:30", close: "21:50" },
+          wed: { open: "07:30", close: "21:50" },
+          thu: { open: "07:30", close: "21:50" },
+          fri: { open: "07:30", close: "21:50" },
+          sat: { open: "08:00", close: "11:50" },
+          sun: null,
+        },
+      },
+      create: {
+        tenantId: tenant.id,
+        timezone: "America/Manaus",
+        awayMessage,
+        schedule: {
+          mon: { open: "07:30", close: "21:50" },
+          tue: { open: "07:30", close: "21:50" },
+          wed: { open: "07:30", close: "21:50" },
+          thu: { open: "07:30", close: "21:50" },
+          fri: { open: "07:30", close: "21:50" },
+          sat: { open: "08:00", close: "11:50" },
+          sun: null,
+        },
+      },
+    });
+
     // Remove menu curto legado (só boas-vindas sem opções 1–4).
     const legacy = await this.prisma.flow.findMany({
       where: {
@@ -377,9 +425,9 @@ Também pode digitar *ramais* para consultar ramais da instituição.`,
       await this.prisma.flow.delete({ where: { id: old.id } });
     }
 
-    if (created > 0 || legacy.length > 0) {
+    if (created > 0 || updated > 0 || legacy.length > 0) {
       this.logger.log(
-        `TI Esbam flows: +${created} criado(s), ${legacy.length} legado(s) removido(s)`,
+        `TI Esbam flows: +${created} criado(s), ${updated} atualizado(s), ${legacy.length} legado(s) removido(s)`,
       );
     }
   }

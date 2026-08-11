@@ -365,10 +365,8 @@ export async function seedTiEsbam(prisma: PrismaClient, passwordHash: string) {
     {
       name: "01 — Boas-vindas e menu TI",
       trigger: "oi|olá|ola|bom dia|boa tarde|boa noite|menu|inicio|início|começar|comecar|ajuda|hello|hi",
-      graph: linearFlow([
-        { id: "m1", label: "Menu principal", text: MENU_TEXT },
-        { id: "m2", label: "Horário", text: HOURS_TEXT },
-      ]),
+      // Horário NÃO vai no boas-vindas — só via awayMessage fora do expediente.
+      graph: linearFlow([{ id: "m1", label: "Menu principal", text: MENU_TEXT }]),
     },
     {
       name: "02 — Portal do Aluno",
