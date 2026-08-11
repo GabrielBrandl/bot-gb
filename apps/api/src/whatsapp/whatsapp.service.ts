@@ -751,11 +751,22 @@ export class WhatsappService {
       externalId: `demo-${Date.now()}`,
     });
 
+    if ("duplicated" in result && result.duplicated) {
+      return {
+        duplicated: true,
+        conversationId: result.conversationId,
+        contactId: null,
+        messageId: null,
+      };
+    }
+
     return {
-      ...result,
       conversationId: result.conversation.id,
       contactId: result.contact.id,
       messageId: result.message.id,
+      contact: result.contact,
+      conversation: result.conversation,
+      message: result.message,
     };
   }
 
