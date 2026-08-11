@@ -15,6 +15,7 @@ import { getSocket, disconnectSocket } from "../lib/socket";
 import type { Conversation, Message, QuickReply } from "../lib/types";
 import { Badge, statusBadgeVariant, statusLabel } from "../components/ui/Badge";
 import { MessageComposer } from "../components/inbox/MessageComposer";
+import { WhatsAppText } from "../components/inbox/WhatsAppText";
 import {
   btnPrimary,
   btnSecondary,
@@ -371,34 +372,54 @@ export function InboxPage() {
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto px-4 py-4">
+              <div
+                className="flex-1 overflow-y-auto px-3 py-4 sm:px-4"
+                style={{
+                  backgroundImage:
+                    "radial-gradient(circle at 20% 20%, rgba(0,168,132,0.06), transparent 40%), radial-gradient(circle at 80% 0%, rgba(47,107,255,0.08), transparent 35%)",
+                }}
+              >
                 {loadingMessages ? (
                   <LoadingState message="Carregando mensagens..." />
                 ) : messages.length === 0 ? (
                   <EmptyState message="Nenhuma mensagem ainda." />
                 ) : (
-                  <div className="space-y-3">
-                    {messages.map((msg) => (
-                      <div key={msg.id} className={`flex ${msg.direction === "outbound" ? "justify-end" : "justify-start"}`}>
+                  <div className="space-y-1.5">
+                    {messages.map((msg) => {
+                      const outbound = msg.direction === "outbound";
+                      return (
                         <div
-                          className={`max-w-[75%] rounded-2xl px-4 py-2 text-sm ${
-                            msg.direction === "outbound"
-                              ? "gb-gradient text-white"
-                              : "border border-[var(--gb-border)] bg-[var(--gb-surface-2)] text-[var(--gb-text)]"
-                          }`}
+                          key={msg.id}
+                          className={`flex ${outbound ? "justify-end" : "justify-start"}`}
                         >
-                          {msg.direction === "outbound" ? (
-                            <p className="mb-1 text-[11px] font-semibold opacity-80">
-                              {msg.sentBy?.name ?? "Assistente virtual"}
+                          <div
+                            className={`relative max-w-[min(85%,34rem)] px-2.5 pb-1.5 pt-1.5 text-[14.2px] leading-[1.35] shadow-sm ${
+                              outbound
+                                ? "rounded-2xl rounded-tr-sm text-[var(--wa-out-text)]"
+                                : "rounded-2xl rounded-tl-sm border border-[var(--gb-border)] bg-[var(--gb-surface-2)] text-[var(--gb-text)]"
+                            }`}
+                            style={outbound ? { backgroundColor: "var(--wa-out-bg)" } : undefined}
+                          >
+                            {outbound ? (
+                              <p className="mb-0.5 text-[11px] font-semibold text-[var(--wa-out-name)]">
+                                {msg.sentBy?.name ?? "Assistente virtual"}
+                              </p>
+                            ) : null}
+                            <WhatsAppText text={msg.content} />
+                            <p
+                              className={`mt-1 text-right text-[10px] leading-none ${
+                                outbound ? "text-[var(--wa-out-time)]" : "text-[var(--gb-muted)]"
+                              }`}
+                            >
+                              {formatDistanceToNow(new Date(msg.createdAt), {
+                                addSuffix: true,
+                                locale: ptBR,
+                              })}
                             </p>
-                          ) : null}
-                          <p className="whitespace-pre-wrap">{msg.content}</p>
-                          <p className="mt-1 text-xs opacity-60">
-                            {formatDistanceToNow(new Date(msg.createdAt), { addSuffix: true, locale: ptBR })}
-                          </p>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                     <div ref={messagesEndRef} />
                   </div>
                 )}

@@ -1,7 +1,13 @@
-import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
+import {
+  FormEvent,
+  KeyboardEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Smile, Send, Zap } from "lucide-react";
 import type { QuickReply } from "../../lib/types";
-import { btnPrimary } from "../ui/PageHeader";
 
 const EMOJI_GROUPS: Array<{ label: string; emojis: string[] }> = [
   {
@@ -28,6 +34,32 @@ type Props = {
   placeholder?: string;
 };
 
+type SlashMatch = { start: number; end: number; query: string };
+
+function findSlashMatch(text: string, cursor: number): SlashMatch | null {
+  const before = text.slice(0, cursor);
+  const m = /(?:^|[\s\n])(\/([^\s\n]*))$/.exec(before);
+  if (!m || m.index == null) return null;
+  const token = m[1];
+  const start = before.length - token.length;
+  return { start, end: cursor, query: (m[2] ?? "").toLowerCase() };
+}
+
+function normalizeShortcut(shortcut?: string | null): string {
+  if (!shortcut) return "";
+  return shortcut.trim().replace(/^\//, "").toLowerCase();
+}
+
+function filterQuickReplies(list: QuickReply[], query: string): QuickReply[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return list;
+  return list.filter((qr) => {
+    const shortcut = normalizeShortcut(qr.shortcut);
+    const title = qr.title.toLowerCase();
+    return shortcut.includes(q) || title.includes(q) || `/${shortcut}`.includes(q);
+  });
+}
+
 export function MessageComposer({
   draft,
   onDraftChange,
@@ -35,32 +67,71 @@ export function MessageComposer({
   sending = false,
   disabled = false,
   quickReplies = [],
-  placeholder = "Digite sua mensagem… (Enter envia · Shift+Enter nova linha)",
+  placeholder = "Mensagem",
 }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const emojiPanelRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const [emojiOpen, setEmojiOpen] = useState(false);
-  const [quickOpen, setQuickOpen] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerFilter, setPickerFilter] = useState("");
+  const [slashOpen, setSlashOpen] = useState(false);
+  const [slashQuery, setSlashQuery] = useState("");
+  const [slashRange, setSlashRange] = useState<{ start: number; end: number } | null>(null);
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  const slashResults = useMemo(
+    () => (slashOpen ? filterQuickReplies(quickReplies, slashQuery) : []),
+    [slashOpen, slashQuery, quickReplies],
+  );
+
+  const pickerResults = useMemo(
+    () => filterQuickReplies(quickReplies, pickerFilter),
+    [quickReplies, pickerFilter],
+  );
+
+  const menuItems = slashOpen ? slashResults : pickerOpen ? pickerResults : [];
+  const menuVisible = (slashOpen || pickerOpen) && !emojiOpen && quickReplies.length > 0;
 
   useEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = "0px";
-    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+    el.style.height = `${Math.min(Math.max(el.scrollHeight, 44), 180)}px`;
   }, [draft]);
 
   useEffect(() => {
-    if (!emojiOpen && !quickOpen) return;
+    setActiveIndex(0);
+  }, [slashQuery, pickerFilter, slashOpen, pickerOpen]);
+
+  useEffect(() => {
+    if (!emojiOpen && !pickerOpen && !slashOpen) return;
     function onDocClick(e: MouseEvent) {
       const target = e.target as Node;
-      if (emojiPanelRef.current?.contains(target)) return;
+      if (panelRef.current?.contains(target)) return;
       if ((e.target as HTMLElement).closest?.("[data-composer-toggle]")) return;
       setEmojiOpen(false);
-      setQuickOpen(false);
+      setPickerOpen(false);
+      setSlashOpen(false);
     }
     document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
-  }, [emojiOpen, quickOpen]);
+  }, [emojiOpen, pickerOpen, slashOpen]);
+
+  function syncSlashFromDraft(nextDraft: string, nextCursor: number) {
+    if (pickerOpen || emojiOpen) {
+      setSlashOpen(false);
+      return;
+    }
+    const match = findSlashMatch(nextDraft, nextCursor);
+    if (!match || quickReplies.length === 0) {
+      setSlashOpen(false);
+      setSlashRange(null);
+      return;
+    }
+    setSlashOpen(true);
+    setSlashQuery(match.query);
+    setSlashRange({ start: match.start, end: match.end });
+  }
 
   function insertAtCursor(text: string) {
     const el = textareaRef.current;
@@ -72,10 +143,44 @@ export function MessageComposer({
     const end = el.selectionEnd ?? draft.length;
     const next = draft.slice(0, start) + text + draft.slice(end);
     onDraftChange(next);
+    const pos = start + text.length;
     requestAnimationFrame(() => {
       el.focus();
-      const pos = start + text.length;
       el.setSelectionRange(pos, pos);
+    });
+  }
+
+  function applyQuickReply(qr: QuickReply, replaceSlash = false) {
+    const el = textareaRef.current;
+    let next = qr.content;
+    let selectStart = qr.content.length;
+    let selectEnd = qr.content.length;
+
+    if (replaceSlash && slashRange && el) {
+      next = draft.slice(0, slashRange.start) + qr.content + draft.slice(slashRange.end);
+      selectStart = slashRange.start + qr.content.length;
+      selectEnd = selectStart;
+    }
+
+    const placeholderMatch = /\[email\]|\[status\]|\[data\]|_\[anexar print\]_/.exec(qr.content);
+    if (placeholderMatch && placeholderMatch.index != null) {
+      const base = replaceSlash && slashRange ? slashRange.start : 0;
+      selectStart = base + placeholderMatch.index;
+      selectEnd = selectStart + placeholderMatch[0].length;
+    }
+
+    onDraftChange(next);
+    setSlashOpen(false);
+    setPickerOpen(false);
+    setEmojiOpen(false);
+    setPickerFilter("");
+    setSlashRange(null);
+
+    requestAnimationFrame(() => {
+      const box = textareaRef.current;
+      if (!box) return;
+      box.focus();
+      box.setSelectionRange(selectStart, selectEnd);
     });
   }
 
@@ -84,46 +189,60 @@ export function MessageComposer({
     if (disabled || sending || !draft.trim()) return;
     await onSend();
     setEmojiOpen(false);
-    setQuickOpen(false);
+    setPickerOpen(false);
+    setSlashOpen(false);
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
+    if (menuVisible && menuItems.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setActiveIndex((i) => (i + 1) % menuItems.length);
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setActiveIndex((i) => (i - 1 + menuItems.length) % menuItems.length);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setSlashOpen(false);
+        setPickerOpen(false);
+        return;
+      }
+      if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) {
+        e.preventDefault();
+        const item = menuItems[activeIndex] ?? menuItems[0];
+        if (item) applyQuickReply(item, slashOpen);
+        return;
+      }
+    }
+
+    // WhatsApp: Enter envia · Shift+Enter quebra linha
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       void handleSubmit();
     }
   }
 
-  /** Só preenche o rascunho — nunca envia. O atendente completa [email]/[status] etc. */
-  function applyQuickReply(qr: QuickReply) {
-    onDraftChange(qr.content);
-    setQuickOpen(false);
-    setEmojiOpen(false);
-    requestAnimationFrame(() => {
-      const el = textareaRef.current;
-      if (!el) return;
-      el.focus();
-      // Posiciona no primeiro placeholder, se existir
-      const match = /\[email\]|\[status\]|\[data\]|_\[anexar print\]_/.exec(qr.content);
-      if (match && match.index != null) {
-        el.setSelectionRange(match.index, match.index + match[0].length);
-      } else {
-        const end = qr.content.length;
-        el.setSelectionRange(end, end);
-      }
-    });
+  function onChange(value: string) {
+    onDraftChange(value);
+    const el = textareaRef.current;
+    const nextCursor = el?.selectionStart ?? value.length;
+    syncSlashFromDraft(value, nextCursor);
   }
 
   return (
-    <div className="border-t border-[var(--gb-border)] bg-[var(--gb-surface)]/80">
-      <form onSubmit={(e) => void handleSubmit(e)} className="relative p-3 sm:p-4">
-        {(emojiOpen || quickOpen) && (
+    <div className="border-t border-[var(--gb-border)] bg-[var(--wa-composer-bg,#0b141a)]/95 px-2 py-2 sm:px-3">
+      <form onSubmit={(e) => void handleSubmit(e)} className="relative">
+        {(emojiOpen || menuVisible) && (
           <div
-            ref={emojiPanelRef}
-            className="absolute bottom-[calc(100%-0.5rem)] left-3 right-3 z-20 max-h-72 overflow-y-auto rounded-xl border border-[var(--gb-border)] bg-[var(--gb-bg-elevated)] p-3 shadow-xl sm:left-4 sm:right-auto sm:w-[400px]"
+            ref={panelRef}
+            className="absolute bottom-[calc(100%+0.4rem)] left-0 right-0 z-30 max-h-72 overflow-hidden rounded-xl border border-[var(--gb-border)] bg-[var(--gb-bg-elevated)] shadow-2xl sm:left-0 sm:right-auto sm:w-[min(100%,420px)]"
           >
             {emojiOpen ? (
-              <div className="space-y-3">
+              <div className="max-h-72 space-y-3 overflow-y-auto p-3">
                 {EMOJI_GROUPS.map((group) => (
                   <div key={group.label}>
                     <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--gb-muted)]">
@@ -145,99 +264,145 @@ export function MessageComposer({
                 ))}
               </div>
             ) : (
-              <div className="space-y-1">
-                <div className="mb-2">
+              <div className="flex max-h-72 flex-col">
+                <div className="border-b border-[var(--gb-border)] px-3 py-2">
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--gb-muted)]">
-                    Mensagens rápidas
+                    {slashOpen ? "Atalhos /" : "Mensagens rápidas"}
                   </p>
                   <p className="mt-0.5 text-xs text-[var(--gb-muted)]">
-                    Ao clicar, o texto vai para o campo — edite e depois envie.
+                    {slashOpen
+                      ? "Digite para filtrar · Enter seleciona · Esc fecha"
+                      : "Clique para colar no campo · edite e envie"}
                   </p>
+                  {pickerOpen && !slashOpen ? (
+                    <input
+                      autoFocus
+                      value={pickerFilter}
+                      onChange={(e) => setPickerFilter(e.target.value)}
+                      placeholder="Buscar ou digite /atalho"
+                      className="mt-2 w-full rounded-lg border border-[var(--gb-border)] bg-[var(--gb-input-bg)] px-2.5 py-1.5 text-sm text-[var(--gb-text)] outline-none placeholder:text-[var(--gb-muted)] focus:border-[var(--gb-cyan)]"
+                    />
+                  ) : null}
                 </div>
-                {quickReplies.map((qr) => (
-                  <button
-                    key={qr.id}
-                    type="button"
-                    className="flex w-full items-start gap-2 rounded-lg px-2 py-2 text-left transition hover:bg-[var(--gb-surface-2)]"
-                    onClick={() => applyQuickReply(qr)}
-                  >
-                    <Zap className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--gb-cyan)]" />
-                    <span className="min-w-0">
-                      <span className="block text-sm font-medium text-[var(--gb-text)]">{qr.title}</span>
-                      <span className="block truncate text-xs text-[var(--gb-muted)]">
-                        {qr.shortcut ? `${qr.shortcut} · ` : ""}
-                        {qr.content.replace(/\s+/g, " ").slice(0, 72)}
-                        {qr.content.length > 72 ? "…" : ""}
-                      </span>
-                    </span>
-                  </button>
-                ))}
+                <div className="overflow-y-auto p-1.5">
+                  {menuItems.length === 0 ? (
+                    <p className="px-2 py-3 text-sm text-[var(--gb-muted)]">Nenhuma mensagem encontrada.</p>
+                  ) : (
+                    menuItems.map((qr, idx) => (
+                      <button
+                        key={qr.id}
+                        type="button"
+                        className={`flex w-full items-start gap-2 rounded-lg px-2.5 py-2 text-left transition ${
+                          idx === activeIndex
+                            ? "bg-[var(--gb-surface-2)]"
+                            : "hover:bg-[var(--gb-surface-2)]/70"
+                        }`}
+                        onMouseEnter={() => setActiveIndex(idx)}
+                        onClick={() => applyQuickReply(qr, slashOpen)}
+                      >
+                        <span className="mt-0.5 rounded bg-[var(--gb-cyan)]/15 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-[var(--gb-cyan)]">
+                          {qr.shortcut?.startsWith("/") ? qr.shortcut : `/${normalizeShortcut(qr.shortcut) || "msg"}`}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-sm font-medium text-[var(--gb-text)]">{qr.title}</span>
+                          <span className="mt-0.5 block line-clamp-2 whitespace-pre-wrap text-xs text-[var(--gb-muted)]">
+                            {qr.content}
+                          </span>
+                        </span>
+                      </button>
+                    ))
+                  )}
+                </div>
               </div>
             )}
           </div>
         )}
 
-        <div className="rounded-2xl border border-[var(--gb-border)] bg-[var(--gb-input-bg)] focus-within:border-[var(--gb-cyan)] focus-within:ring-1 focus-within:ring-[var(--gb-cyan)]/40">
-          <textarea
-            ref={textareaRef}
-            rows={1}
-            value={draft}
+        {/* Barra estilo WhatsApp */}
+        <div className="flex items-end gap-2">
+          <button
+            type="button"
+            data-composer-toggle
+            title="Emojis"
             disabled={disabled || sending}
-            onChange={(e) => onDraftChange(e.target.value)}
-            onKeyDown={onKeyDown}
-            placeholder={placeholder}
-            className="max-h-40 min-h-[44px] w-full resize-none bg-transparent px-4 pt-3 pb-2 text-sm text-[var(--gb-text)] outline-none placeholder:text-[var(--gb-muted)]"
-          />
-          <div className="flex items-center justify-between gap-2 px-2 pb-2">
-            <div className="flex flex-wrap items-center gap-1">
+            className={`mb-0.5 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[var(--gb-muted)] transition hover:bg-[var(--gb-surface-2)] hover:text-[var(--gb-cyan)] ${
+              emojiOpen ? "bg-[var(--gb-surface-2)] text-[var(--gb-cyan)]" : ""
+            }`}
+            onClick={() => {
+              setEmojiOpen((v) => !v);
+              setPickerOpen(false);
+              setSlashOpen(false);
+            }}
+          >
+            <Smile className="h-5 w-5" />
+          </button>
+
+          <div className="flex min-w-0 flex-1 items-end rounded-[1.5rem] border border-[var(--gb-border)] bg-[var(--gb-input-bg)] px-2 py-1 focus-within:border-[var(--gb-cyan)]/60">
+            {quickReplies.length > 0 ? (
               <button
                 type="button"
                 data-composer-toggle
-                title="Emojis"
-                className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-[var(--gb-muted)] transition hover:bg-[var(--gb-surface-2)] hover:text-[var(--gb-cyan)] ${
-                  emojiOpen ? "bg-[var(--gb-surface-2)] text-[var(--gb-cyan)]" : ""
+                title="Mensagens rápidas (ou digite /)"
+                disabled={disabled || sending}
+                className={`mb-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition hover:bg-[var(--gb-surface-2)] hover:text-[var(--gb-cyan)] ${
+                  pickerOpen
+                    ? "bg-[var(--gb-surface-2)] text-[var(--gb-cyan)]"
+                    : "text-[var(--gb-muted)]"
                 }`}
                 onClick={() => {
-                  setEmojiOpen((v) => !v);
-                  setQuickOpen(false);
+                  setPickerOpen((v) => !v);
+                  setEmojiOpen(false);
+                  setSlashOpen(false);
+                  setPickerFilter("");
                 }}
               >
-                <Smile className="h-4 w-4" />
-                <span className="hidden sm:inline">Emoji</span>
+                <Zap className="h-4 w-4" />
               </button>
-              {quickReplies.length > 0 ? (
-                <button
-                  type="button"
-                  data-composer-toggle
-                  title="Abrir mensagens rápidas"
-                  className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition hover:bg-[var(--gb-surface-2)] hover:text-[var(--gb-cyan)] ${
-                    quickOpen
-                      ? "bg-[var(--gb-surface-2)] text-[var(--gb-cyan)]"
-                      : "text-[var(--gb-muted)]"
-                  }`}
-                  onClick={() => {
-                    setQuickOpen((v) => !v);
-                    setEmojiOpen(false);
-                  }}
-                >
-                  <Zap className="h-4 w-4" />
-                  Mensagens rápidas
-                </button>
-              ) : null}
-              <span className="hidden text-[11px] text-[var(--gb-muted)] lg:inline">
-                Enter envia · Shift+Enter quebra linha
-              </span>
-            </div>
-            <button
-              type="submit"
-              className={`${btnPrimary} !rounded-xl !px-3 !py-2`}
-              disabled={disabled || sending || !draft.trim()}
-              title="Enviar"
-            >
-              <Send className="h-4 w-4" />
-            </button>
+            ) : null}
+
+            <textarea
+              ref={textareaRef}
+              rows={1}
+              value={draft}
+              disabled={disabled || sending}
+              onChange={(e) => onChange(e.target.value)}
+              onKeyDown={onKeyDown}
+              onClick={() => {
+                const el = textareaRef.current;
+                if (!el) return;
+                const pos = el.selectionStart ?? 0;
+                syncSlashFromDraft(draft, pos);
+              }}
+              onKeyUp={() => {
+                const el = textareaRef.current;
+                if (!el) return;
+                const pos = el.selectionStart ?? 0;
+                if (!pickerOpen && !emojiOpen) syncSlashFromDraft(draft, pos);
+              }}
+              placeholder={
+                quickReplies.length > 0
+                  ? "Mensagem · / atalho · Shift+Enter nova linha"
+                  : placeholder
+              }
+              className="max-h-[180px] min-h-[40px] w-full resize-none bg-transparent px-2 py-2 text-[15px] leading-5 text-[var(--gb-text)] outline-none placeholder:text-[var(--gb-muted)]"
+            />
           </div>
+
+          <button
+            type="submit"
+            title="Enviar (Enter)"
+            disabled={disabled || sending || !draft.trim()}
+            className="mb-0.5 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#00a884] text-white shadow transition hover:bg-[#06cf9c] disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <Send className="h-4 w-4 translate-x-px" />
+          </button>
         </div>
+
+        <p className="mt-1.5 px-1 text-[10px] text-[var(--gb-muted)] sm:text-[11px]">
+          Enter envia · Shift+Enter quebra linha
+          {quickReplies.length > 0 ? " · digite / para atalhos" : ""}
+          {slashOpen ? ` · ${slashResults.length} resultado(s)` : ""}
+        </p>
       </form>
     </div>
   );

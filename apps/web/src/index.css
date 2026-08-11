@@ -40,6 +40,11 @@
   --gb-overlay: rgba(0, 0, 0, 0.6);
   --gb-body-glow-1: rgba(47, 107, 255, 0.28);
   --gb-body-glow-2: rgba(139, 92, 246, 0.22);
+  --wa-out-bg: #005c4b;
+  --wa-out-text: #e9edef;
+  --wa-out-name: #8ce4c8;
+  --wa-out-time: rgba(233, 237, 239, 0.55);
+  --wa-composer-bg: #0b141a;
 }
 
 html.light {
@@ -62,6 +67,11 @@ html.light {
   --gb-body-glow-2: rgba(139, 92, 246, 0.1);
   --abs-blue-dark: #1e3a8a;
   --abs-white: #0f172a;
+  --wa-out-bg: #d9fdd3;
+  --wa-out-text: #111b21;
+  --wa-out-name: #1fa855;
+  --wa-out-time: rgba(17, 27, 33, 0.45);
+  --wa-composer-bg: #f0f2f5;
 }
 
 * {
