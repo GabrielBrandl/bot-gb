@@ -612,7 +612,15 @@ export class WhatsappService {
     });
   }
 
-  async handleInbound(input: InboundMessageInput) {
+  async handleInbound(input: InboundMessageInput): Promise<
+    | { duplicated: true; conversationId: string }
+    | {
+        duplicated?: false;
+        contact: { id: string };
+        conversation: { id: string };
+        message: { id: string };
+      }
+  > {
     const phone = input.phone.replace(/\D/g, "");
     if (!phone) {
       throw new BadRequestException("Telefone inválido");
@@ -751,10 +759,10 @@ export class WhatsappService {
       externalId: `demo-${Date.now()}`,
     });
 
-    if ("duplicated" in result && result.duplicated) {
+    if (!("conversation" in result) || !result.conversation || !result.contact || !result.message) {
       return {
-        duplicated: true,
-        conversationId: result.conversationId,
+        duplicated: true as const,
+        conversationId: "conversationId" in result ? result.conversationId : null,
         contactId: null,
         messageId: null,
       };
