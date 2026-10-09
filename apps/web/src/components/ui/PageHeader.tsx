@@ -10,7 +10,7 @@ export function PageHeader({ title, description, actions }: PageHeaderProps) {
   return (
     <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
       <div>
-        <h1 className="gb-display text-2xl font-bold tracking-tight text-white">{title}</h1>
+        <h1 className="gb-display text-2xl font-bold tracking-tight text-[var(--gb-text)]">{title}</h1>
         {description ? <p className="mt-1 text-sm text-[var(--gb-muted)]">{description}</p> : null}
       </div>
       {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
@@ -49,7 +49,7 @@ export function Card({ children, className = "" }: { children: ReactNode; classN
 export const inputClass = "gb-input text-sm";
 
 export const selectClass =
-  "rounded-xl border border-[var(--gb-border)] bg-[rgba(7,11,22,0.65)] px-3 py-2 text-sm text-white outline-none focus:border-[var(--gb-purple)] focus:shadow-[0_0_0_3px_rgba(139,92,246,0.2)]";
+  "rounded-xl border border-[var(--gb-border)] bg-[var(--gb-input-bg)] px-3 py-2 text-sm text-[var(--gb-text)] outline-none focus:border-[var(--gb-purple)]";
 
 export const btnPrimary =
   "inline-flex items-center justify-center gb-btn-primary px-4 py-2 text-sm disabled:opacity-60";

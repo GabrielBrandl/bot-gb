@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Instagram, MessageCircle, Pencil } from "lucide-react";
@@ -28,6 +29,7 @@ import {
 
 export function InboxPage() {
   const { token, user } = useAuth();
+  const [searchParams] = useSearchParams();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -88,6 +90,11 @@ export function InboxPage() {
     if (!token) return;
     quickRepliesApi.list(token).then(setQuickReplies).catch(() => {});
   }, [token]);
+
+  useEffect(() => {
+    const fromQuery = searchParams.get("c");
+    if (fromQuery) setSelectedId(fromQuery);
+  }, [searchParams]);
 
   useEffect(() => {
     if (selectedId) void loadMessages(selectedId);

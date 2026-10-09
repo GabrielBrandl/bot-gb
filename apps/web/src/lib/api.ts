@@ -182,13 +182,24 @@ export const quickRepliesApi = {
 // Kanban
 export const kanbanApi = {
   getBoard: (token: string) => apiRequest<KanbanBoard>("/kanban/board", {}, token),
-  createCard: (token: string, data: { title: string; stageId: string; description?: string; contactId?: string }) =>
-    apiRequest<KanbanCard>("/kanban/cards", { method: "POST", body: JSON.stringify(data) }, token),
+  syncInbox: (token: string) =>
+    apiRequest<{ created: number }>("/kanban/sync", { method: "POST" }, token),
+  createCard: (
+    token: string,
+    data: { title: string; stageId: string; contactId?: string; conversationId?: string },
+  ) => apiRequest<KanbanCard>("/kanban/cards", { method: "POST", body: JSON.stringify(data) }, token),
+  updateCard: (token: string, id: string, data: { title?: string }) =>
+    apiRequest<KanbanCard>(`/kanban/cards/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }, token),
   moveCard: (token: string, id: string, stageId: string, order: number) =>
     apiRequest<KanbanCard>(`/kanban/cards/${id}/move`, {
       method: "PATCH",
       body: JSON.stringify({ stageId, order }),
     }, token),
+  deleteCard: (token: string, id: string) =>
+    apiRequest<{ ok: boolean }>(`/kanban/cards/${id}`, { method: "DELETE" }, token),
 };
 
 // Flows

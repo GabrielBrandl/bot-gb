@@ -68,10 +68,17 @@ export interface KanbanStage {
 
 export interface KanbanCard {
   id: string;
-  title: string;
+  title?: string | null;
   description?: string;
   contactId?: string;
   contact?: Contact;
+  conversationId?: string | null;
+  conversation?: {
+    id: string;
+    status: string;
+    channel?: string;
+    assignee?: { id: string; name: string } | null;
+  } | null;
   stageId: string;
   order: number;
 }

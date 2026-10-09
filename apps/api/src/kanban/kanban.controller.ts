@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
 import { IsNumber, IsOptional, IsString } from "class-validator";
 import type { AuthUser } from "@bot-wpp/shared-types";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
@@ -9,8 +9,9 @@ class CreateCardDto {
   @IsString()
   stageId!: string;
 
+  @IsOptional()
   @IsString()
-  contactId!: string;
+  contactId?: string;
 
   @IsOptional()
   @IsString()
@@ -63,6 +64,11 @@ export class KanbanController {
     return this.kanbanService.getBoard(user.tenantId);
   }
 
+  @Post("sync")
+  syncFromInbox(@CurrentUser() user: AuthUser) {
+    return this.kanbanService.syncFromInbox(user.tenantId);
+  }
+
   @Post("cards")
   createCard(@CurrentUser() user: AuthUser, @Body() dto: CreateCardDto) {
     return this.kanbanService.createCard(user.tenantId, dto);
@@ -76,5 +82,10 @@ export class KanbanController {
   @Patch("cards/:id")
   updateCard(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() dto: UpdateCardDto) {
     return this.kanbanService.updateCard(user.tenantId, id, dto);
+  }
+
+  @Delete("cards/:id")
+  deleteCard(@CurrentUser() user: AuthUser, @Param("id") id: string) {
+    return this.kanbanService.deleteCard(user.tenantId, id);
   }
 }
