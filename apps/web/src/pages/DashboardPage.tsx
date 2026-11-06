@@ -11,6 +11,7 @@ import {
 import { useAuth } from "../lib/auth";
 import { reportsApi, tenantsApi } from "../lib/api";
 import type { ReportsOverview, Tenant } from "../lib/types";
+import { CsatChart } from "../components/reports/CsatChart";
 import { Card, ErrorState, LoadingState, PageHeader } from "../components/ui/PageHeader";
 
 export function DashboardPage() {
@@ -159,6 +160,16 @@ export function DashboardPage() {
           )}
         </Card>
       </section>
+
+      {reports ? (
+        <div className="mt-6">
+          <CsatChart
+            scores={reports.csatScores}
+            average={reports.csatAverage}
+            total={reports.csatTotal}
+          />
+        </div>
+      ) : null}
 
       <section className="mt-6">
         <h2 className="mb-3 text-sm font-medium text-[var(--abs-muted)]">Acesso rápido</h2>

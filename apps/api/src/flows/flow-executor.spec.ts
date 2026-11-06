@@ -2,8 +2,11 @@ import {
   findMatchingFlow,
   isGreetingText,
   isGreetingTrigger,
+  isPhoneListRequest,
+  isThanksMessage,
   isWithinBusinessHours,
   isWithinGreetingCooldown,
+  parseSatisfactionScore,
   GREETING_COOLDOWN_MS,
 } from "./flow-utils";
 
@@ -99,5 +102,25 @@ describe("business hours", () => {
   it("is closed on Sunday", () => {
     const when = new Date("2026-08-09T14:00:00.000Z");
     expect(isWithinBusinessHours(schedule, "America/Manaus", when)).toBe(false);
+  });
+});
+
+describe("TI Esbam shortcuts", () => {
+  it("recognizes ramais, ramis and contato", () => {
+    expect(isPhoneListRequest("ramis")).toBe(true);
+    expect(isPhoneListRequest("quero o contato")).toBe(true);
+    expect(isPhoneListRequest("1")).toBe(false);
+  });
+
+  it("recognizes thanks", () => {
+    expect(isThanksMessage("Obrigada!")).toBe(true);
+    expect(isThanksMessage("muito obrigado")).toBe(true);
+    expect(isThanksMessage("ainda preciso de ajuda")).toBe(false);
+  });
+
+  it("parses a score from 1 to 5", () => {
+    expect(parseSatisfactionScore("5")).toBe(5);
+    expect(parseSatisfactionScore("nota 3")).toBe(3);
+    expect(parseSatisfactionScore("6")).toBeNull();
   });
 });

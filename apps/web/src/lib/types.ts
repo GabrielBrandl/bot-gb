@@ -152,6 +152,9 @@ export interface ReportsOverview {
   campaignsActive: number;
   paymentsPending: number;
   paymentsPaid: number;
+  csatAverage?: number | null;
+  csatTotal?: number;
+  csatScores?: Array<{ score: number; count: number }>;
 }
 
 export interface Tenant {

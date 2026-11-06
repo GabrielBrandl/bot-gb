@@ -73,6 +73,58 @@ const GREETING_KEYWORDS = new Set([
   "ajuda",
 ]);
 
+const PHONE_LIST_KEYWORDS = [
+  "ramais",
+  "ramal",
+  "ramis",
+  "telefone",
+  "telefones",
+  "contato",
+  "contatos",
+  "extensao",
+  "extensão",
+];
+
+/** Pedido curto de ramais, telefones ou contato. */
+export function isPhoneListRequest(text: string): boolean {
+  const normalized = text
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+  if (!normalized) return false;
+  const keywords = PHONE_LIST_KEYWORDS.map((k) =>
+    k.normalize("NFD").replace(/[\u0300-\u036f]/g, ""),
+  );
+  if (keywords.some((k) => normalized === k || normalized.startsWith(`${k} `))) return true;
+  return normalized.length <= 48 && keywords.some((k) => normalized.includes(k));
+}
+
+/** Agradecimento que encerra o atendimento. */
+export function isThanksMessage(text: string): boolean {
+  const normalized = text
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[!?.]+$/g, "")
+    .trim();
+  if (!normalized || normalized.length > 80) return false;
+  return /^(muito\s+)?obrigad[oa]s?$|^(valeu|tchau|flw|ate logo|ate mais|encerrar)$/.test(normalized);
+}
+
+/** Nota de 1 a 5 isolada, ou "nota 5". */
+export function parseSatisfactionScore(text: string): number | null {
+  const normalized = text
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+  const match = /^(?:nota\s*)?([1-5])(?:\s*estrelas?)?$/.exec(normalized);
+  if (!match) return null;
+  return Number(match[1]);
+}
+
 export function isGreetingTrigger(trigger: string): boolean {
   return triggerKeywords(trigger).some((k) => GREETING_KEYWORDS.has(k));
 }

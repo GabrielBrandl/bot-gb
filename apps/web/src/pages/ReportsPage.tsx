@@ -12,6 +12,7 @@ import {
 import { useAuth } from "../lib/auth";
 import { reportsApi } from "../lib/api";
 import type { ReportsOverview } from "../lib/types";
+import { CsatChart } from "../components/reports/CsatChart";
 import { Card, ErrorState, LoadingState, PageHeader } from "../components/ui/PageHeader";
 
 export function ReportsPage() {
@@ -111,6 +112,13 @@ export function ReportsPage() {
         <ErrorState message={error} />
       ) : reports ? (
         <>
+          <div className="mb-6">
+            <CsatChart
+              scores={reports.csatScores}
+              average={reports.csatAverage}
+              total={reports.csatTotal}
+            />
+          </div>
           <section className="mb-6 grid gap-4 sm:grid-cols-2">
             {volume.map(({ label, value, icon: Icon, color }) => (
               <Card key={label} className="border-l-4 border-l-[var(--abs-blue)]">

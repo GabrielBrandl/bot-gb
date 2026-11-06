@@ -425,6 +425,102 @@ Atenciosamente,
       await this.prisma.flow.delete({ where: { id: old.id } });
     }
 
+    const phoneList = `*Ramais e telefones — UNIESBAM*
+
+*Unidade Adrianópolis*
+Prefixo *(92) 3305-*
+
+*Administração e suporte*
+• Tecnologia da Informação (TI): *1829*
+• Ensino a Distância (EAD): *1838*
+• Biblioteca: *1804*
+• Secretaria: *1800*, *1802* e *1801*
+• Coordenação Acadêmica: *1811*
+• Financeiro (Contas a Receber): *1810*
+• Ouvidoria: *1816*
+• FIES: *1803*
+• Comunicação e Marketing: *1808*
+• Departamento Pessoal / Recursos Humanos: *1824*
+• Portaria: *1858*
+
+*Coordenações de curso (Adrianópolis)*
+• Administração e Gestão de RH: *1835*
+• Direito: *1828*
+• Psicologia: *1836*
+• Medicina Veterinária: *1857*
+• Análise e Desenvolvimento de Sistemas: *1839*
+• Ciências Contábeis e Gestão Financeira: *1834*
+• Serviço Social: *1849*
+• Ciências Biológicas, Matemática e Pedagogia: *1830*
+
+*Unidade Centro*
+• Secretaria Acadêmica: *(92) 3023-9071* e *(92) 3023-0851*
+• Financeiro: *(92) 3023-0498*
+• Coordenação dos Cursos: *(92) 3023-1145*
+• Tecnologia da Informação (ramal interno): *29*
+
+Digite *menu* para voltar ao atendimento do Setor de TI.`;
+    const closing = `Agradecemos o seu contato. Foi um prazer atender você.
+
+Para encerrar, avalie este atendimento de *1* a *5*:
+*1* — ruim
+*2* — regular
+*3* — bom
+*4* — muito bom
+*5* — excelente
+
+Responda apenas com o número.
+
+*— Setor de TI | UNIESBAM*`;
+    const fixedReplies = [
+      {
+        name: "07 — Ramais UNIESBAM",
+        trigger: "ramal|ramais|ramis|telefone|telefones|contato|contatos|extensao|extensão",
+        text: phoneList,
+      },
+      {
+        name: "08 — Encerramento",
+        trigger: "obrigado|obrigada|valeu|tchau|encerrar|flw|até logo|ate logo",
+        text: closing,
+      },
+    ];
+    for (const reply of fixedReplies) {
+      const nodes = {
+        nodes: [
+          { id: "t1", type: "trigger", data: { label: "Gatilho" }, position: { x: 40, y: 120 } },
+          {
+            id: "m1",
+            type: "send_text",
+            data: { label: reply.name, text: reply.text },
+            position: { x: 280, y: 120 },
+          },
+        ],
+        edges: [{ id: "e1", source: "t1", target: "m1" }],
+      };
+      const current = await this.prisma.flow.findFirst({
+        where: { tenantId: tenant.id, name: reply.name },
+      });
+      if (current) {
+        await this.prisma.flow.update({
+          where: { id: current.id },
+          data: { trigger: reply.trigger, nodes, active: true },
+        });
+        updated += 1;
+      } else {
+        await this.prisma.flow.create({
+          data: {
+            tenantId: tenant.id,
+            name: reply.name,
+            trigger: reply.trigger,
+            channel: Channel.WHATSAPP,
+            active: true,
+            nodes,
+          },
+        });
+        created += 1;
+      }
+    }
+
     if (created > 0 || updated > 0 || legacy.length > 0) {
       this.logger.log(
         `TI Esbam flows: +${created} criado(s), ${updated} atualizado(s), ${legacy.length} legado(s) removido(s)`,

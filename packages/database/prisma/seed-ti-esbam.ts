@@ -130,42 +130,52 @@ const OUTROS_TEXT = `Para *outros assuntos*, entre em contato com a equipe de At
 Ou digite *menu* para voltar ao atendimento do Setor de TI.
 Também pode digitar *ramais* para consultar ramais da instituição.`;
 
-const RAMAIS_TEXT = `*Ramais úteis — UNIESBAM*
+const RAMAIS_TEXT = `*Ramais e telefones — UNIESBAM*
 
-📍 *Unidade Adrianópolis* — prefixo *(92) 3305-*
+*Unidade Adrianópolis*
+Prefixo *(92) 3305-*
 
-*Administração / suporte*
+*Administração e suporte*
 • Tecnologia da Informação (TI): *1829*
-• EAD — Ensino a Distância: *1838*
+• Ensino a Distância (EAD): *1838*
 • Biblioteca: *1804*
-• Secretaria: *1800 / 1802 / 1801*
+• Secretaria: *1800*, *1802* e *1801*
 • Coordenação Acadêmica: *1811*
 • Financeiro (Contas a Receber): *1810*
 • Ouvidoria: *1816*
 • FIES: *1803*
 • Comunicação e Marketing: *1808*
-• DP / RH: *1824*
+• Departamento Pessoal / Recursos Humanos: *1824*
 • Portaria: *1858*
 
 *Coordenações de curso (Adrianópolis)*
-• Administração / Gestão de RH: *1835*
+• Administração e Gestão de RH: *1835*
 • Direito: *1828*
 • Psicologia: *1836*
 • Medicina Veterinária: *1857*
 • Análise e Desenvolvimento de Sistemas: *1839*
-• Ciências Contábeis / Gestão Financeira: *1834*
+• Ciências Contábeis e Gestão Financeira: *1834*
 • Serviço Social: *1849*
-• Ciências Biológicas / Matemática / Pedagogia: *1830*
+• Ciências Biológicas, Matemática e Pedagogia: *1830*
 
-📍 *Unidade Centro*
-• Secretaria Acadêmica: *(92) 3023-9071 / 3023-0851*
+*Unidade Centro*
+• Secretaria Acadêmica: *(92) 3023-9071* e *(92) 3023-0851*
 • Financeiro: *(92) 3023-0498*
 • Coordenação dos Cursos: *(92) 3023-1145*
-• TI (ramal interno): *29*
+• Tecnologia da Informação (ramal interno): *29*
 
 Digite *menu* para voltar ao atendimento do Setor de TI.`;
 
-const CLOSE_TEXT = `Agradecemos o seu contato. Tenha um ótimo dia! 👍
+const CLOSE_TEXT = `Agradecemos o seu contato. Foi um prazer atender você.
+
+Para encerrar, avalie este atendimento de *1* a *5*:
+*1* — ruim
+*2* — regular
+*3* — bom
+*4* — muito bom
+*5* — excelente
+
+Responda apenas com o número.
 
 *— Setor de TI | UNIESBAM*`;
 
@@ -426,7 +436,7 @@ export async function seedTiEsbam(prisma: PrismaClient, passwordHash: string) {
     },
     {
       name: "07 — Ramais UNIESBAM",
-      trigger: "ramal|ramais|telefone|telefones|contato|contatos|extensao|extensão",
+      trigger: "ramal|ramais|ramis|telefone|telefones|contato|contatos|extensao|extensão",
       graph: linearFlow([{ id: "m1", label: "Ramais", text: RAMAIS_TEXT }]),
     },
     {

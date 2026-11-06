@@ -20,6 +20,7 @@ export class ReportsService {
       paymentsPaid,
       campaignsActive,
       contactsTotal,
+      csatGroups,
     ] = await Promise.all([
       this.prisma.message.count({
         where: { tenantId, createdAt: { gte: startOfDay } },
@@ -33,7 +34,22 @@ export class ReportsService {
       this.prisma.payment.count({ where: { tenantId, status: "paid" } }),
       this.prisma.campaign.count({ where: { tenantId, status: "running" } }),
       this.prisma.contact.count({ where: { tenantId } }),
+      this.prisma.conversation.groupBy({
+        by: ["csatScore"],
+        where: { tenantId, csatScore: { not: null } },
+        _count: { _all: true },
+      }),
     ]);
+
+    const scores = [1, 2, 3, 4, 5].map((score) => {
+      const row = csatGroups.find((item) => item.csatScore === score);
+      return { score, count: row?._count._all ?? 0 };
+    });
+    const csatTotal = scores.reduce((sum, item) => sum + item.count, 0);
+    const csatAverage =
+      csatTotal === 0
+        ? null
+        : Math.round((scores.reduce((sum, item) => sum + item.score * item.count, 0) / csatTotal) * 10) / 10;
 
     // Flat shape consumed by Dashboard + Relatórios (GB Systems admin UI).
     return {
@@ -47,6 +63,9 @@ export class ReportsService {
       campaignsActive,
       paymentsPending,
       paymentsPaid,
+      csatAverage,
+      csatTotal,
+      csatScores: scores,
     };
   }
 }

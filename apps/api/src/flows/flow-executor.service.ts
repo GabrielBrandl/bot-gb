@@ -11,13 +11,18 @@ import {
   getStartNode,
   isGreetingText,
   isGreetingTrigger,
+  isPhoneListRequest,
+  isThanksMessage,
   isWithinBusinessHours,
+  parseSatisfactionScore,
   isWithinGreetingCooldown,
   parseFlowGraph,
   GREETING_COOLDOWN_MS,
   type BusinessSchedule,
 } from "./flow-utils";
 import type { FlowNode } from "@bot-wpp/shared-types";
+
+const SURVEY_MARKER = "avalie este atendimento";
 
 export interface InboundFlowContext {
   tenantId: string;
@@ -44,6 +49,25 @@ export class FlowExecutorService {
       where: { id: ctx.conversationId, tenantId: ctx.tenantId },
     });
 
+    const flows = await this.prisma.flow.findMany({
+      where: { tenantId: ctx.tenantId, active: true },
+    });
+
+    // Ramais, agradecimento e nota funcionam mesmo depois que o atendente assumiu.
+    if (isPhoneListRequest(ctx.text)) {
+      const listed = this.firstFlowText(flows, /ramal|contato|telefone/);
+      await this.messages.sendText(ctx.tenantId, ctx.conversationId, listed ?? this.defaultPhoneList());
+      return;
+    }
+    if (isThanksMessage(ctx.text)) {
+      const closing = this.firstFlowText(flows, /obrigad|encerrar|tchau/);
+      await this.messages.sendText(ctx.tenantId, ctx.conversationId, closing ?? this.defaultClosing());
+      return;
+    }
+    if (await this.captureSatisfaction(ctx)) {
+      return;
+    }
+
     // Atendente assumiu (atribuído) OU já enviou qualquer mensagem → bot silencia.
     if (conversation?.assignedTo) {
       return;
@@ -51,10 +75,6 @@ export class FlowExecutorService {
     if (await this.hasHumanOutbound(ctx)) {
       return;
     }
-
-    const flows = await this.prisma.flow.findMany({
-      where: { tenantId: ctx.tenantId, active: true },
-    });
 
     const matched = findMatchingFlow(flows, ctx.text);
     const hours = await this.prisma.businessHours.findUnique({
@@ -140,6 +160,56 @@ export class FlowExecutorService {
     });
 
     return isWithinGreetingCooldown(prior?.createdAt ?? null);
+  }
+
+  private firstFlowText(
+    flows: Array<{ trigger: string; nodes: unknown; active: boolean }>,
+    triggerPattern: RegExp,
+  ): string | null {
+    const matches = flows.filter((item) => item.active && triggerPattern.test(item.trigger.toLowerCase()));
+    const flow = matches.sort((a, b) => b.trigger.length - a.trigger.length)[0];
+    if (!flow) return null;
+    const graph = parseFlowGraph(flow.nodes);
+    const node = graph.nodes.find((item) => item.type === "send_text" || item.type === "message");
+    const text = String(node?.data?.text ?? node?.data?.message ?? "").trim();
+    return text || null;
+  }
+
+  private defaultPhoneList(): string {
+    return `*Ramais e telefones — UNIESBAM*\n\nDigite *menu* para voltar ao atendimento do Setor de TI.`;
+  }
+
+  private defaultClosing(): string {
+    return `Agradecemos o seu contato. Foi um prazer atender você.\n\nPara encerrar, avalie este atendimento de *1* a *5* respondendo apenas com o número.\n\n*— Setor de TI | UNIESBAM*`;
+  }
+
+  /** Grava a nota quando a última mensagem do bot pediu a avaliação. */
+  private async captureSatisfaction(ctx: InboundFlowContext): Promise<boolean> {
+    const score = parseSatisfactionScore(ctx.text);
+    if (!score) return false;
+
+    const lastOutbound = await this.prisma.message.findFirst({
+      where: {
+        tenantId: ctx.tenantId,
+        conversationId: ctx.conversationId,
+        direction: "outbound",
+        sentByUserId: null,
+      },
+      orderBy: { createdAt: "desc" },
+      select: { content: true },
+    });
+    if (!lastOutbound?.content.toLowerCase().includes(SURVEY_MARKER)) return false;
+
+    await this.prisma.conversation.update({
+      where: { id: ctx.conversationId },
+      data: { csatScore: score, status: "closed" },
+    });
+    await this.messages.sendText(
+      ctx.tenantId,
+      ctx.conversationId,
+      `Obrigado pela avaliação. Registramos a nota *${score}*.\n\nTenha um ótimo dia!\n*— Setor de TI | UNIESBAM*`,
+    );
+    return true;
   }
 
   /** Qualquer outbound com sentByUserId = atendente humano já falou nesta conversa. */
