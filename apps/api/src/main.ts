@@ -81,8 +81,13 @@ async function bootstrap() {
   const prefix = config.get<string>("API_PREFIX", "api");
   app.setGlobalPrefix(prefix);
 
+  const corsOrigin = config.get<string>("CORS_ORIGIN", "http://localhost:5173");
+  const origins = corsOrigin
+    .split(",")
+    .map((o) => o.trim())
+    .filter(Boolean);
   app.enableCors({
-    origin: config.get<string>("CORS_ORIGIN", "http://localhost:5173"),
+    origin: origins.length <= 1 ? origins[0] ?? true : origins,
     credentials: true,
   });
 
